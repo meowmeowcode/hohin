@@ -81,10 +81,10 @@ func (r *Repo[T]) Delete(db *Db, f filter.Filter) error {
 		}
 	}
 
-	for i := len(indices); i >= 0; i -= 1 {
+	for i := len(indices) - 1; i >= 0; i -= 1 {
 		collection := make([]any, 0)
-		collection = append(collection, db.data[r.collection][:i]...)
-		collection = append(collection, db.data[r.collection][i+1:]...)
+		collection = append(collection, db.data[r.collection][:indices[i]]...)
+		collection = append(collection, db.data[r.collection][indices[i]+1:]...)
 		db.data[r.collection] = collection
 	}
 

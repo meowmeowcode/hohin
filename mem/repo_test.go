@@ -198,7 +198,7 @@ func TestExists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exists {
+	if !exists {
 		t.Fatalf("Bob is deleted")
 	}
 	exists, err = repo.Exists(&db, filter.Eq("Name", "Eve"))
