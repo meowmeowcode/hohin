@@ -16,48 +16,73 @@ import (
 )
 
 type Db struct {
-	data map[string][]any
+	data map[string][][]byte
 }
 
-func NewDb() Db {
-	return Db{data: make(map[string][]any)}
+func (db *Db) Transaction(f func(hohin.Db) error) error {
+	t := db.copy()
+	err := f(t)
+	if err != nil {
+		return err
+	}
+	db.data = t.data
+	return nil
+}
+
+func (db *Db) copy() *Db {
+	c := NewDb()
+	for k, v := range db.data {
+		c.data[k] = make([][]byte, 0)
+		for _, record := range v {
+			c.data[k] = append(c.data[k], record)
+		}
+	}
+	return c
+}
+
+func NewDb() *Db {
+	return &Db{data: make(map[string][][]byte)}
 }
 
 type Repo[T any] struct {
 	collection string
 }
 
-func NewRepo[T any](collection string) Repo[T] {
-	return Repo[T]{collection: collection}
+func NewRepo[T any](collection string) *Repo[T] {
+	return &Repo[T]{collection: collection}
 }
 
-func (r *Repo[T]) Get(db *Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) Get(db hohin.Db, f filter.Filter) (T, error) {
 	var zero T
 
-	for _, entity := range db.data[r.collection] {
-		found, err := matchesFilter(entity, f)
+	for _, record := range db.(*Db).data[r.collection] {
+		entity, err := r.load(record)
+		if err != nil {
+			return zero, err
+		}
+		found, err := r.matchesFilter(entity, f)
 		if err != nil {
 			return zero, err
 		}
 		if found {
-			entityCopy, err := copyEntity(entity.(T))
-			if err != nil {
-				return zero, err
-			}
-			return entityCopy, nil
+			return entity, nil
 		}
 	}
 
 	return zero, hohin.NotFound
 }
 
-func (r *Repo[T]) GetForUpdate(db *Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) GetForUpdate(db hohin.Db, f filter.Filter) (T, error) {
 	return r.Get(db, f)
 }
 
-func (r *Repo[T]) Exists(db *Db, f filter.Filter) (bool, error) {
-	for _, entity := range db.data[r.collection] {
-		found, err := matchesFilter(entity, f)
+func (r *Repo[T]) Exists(db hohin.Db, f filter.Filter) (bool, error) {
+	for _, record := range db.(*Db).data[r.collection] {
+		entity, err := r.load(record)
+		if err != nil {
+			return false, err
+		}
+		found, err := r.matchesFilter(entity, f)
 		if err != nil {
 			return false, err
 		}
@@ -69,10 +94,15 @@ func (r *Repo[T]) Exists(db *Db, f filter.Filter) (bool, error) {
 	return false, nil
 }
 
-func (r *Repo[T]) Delete(db *Db, f filter.Filter) error {
+func (r *Repo[T]) Delete(db hohin.Db, f filter.Filter) error {
+	dbObj := db.(*Db)
 	indices := make([]int, 0)
-	for i, entity := range db.data[r.collection] {
-		found, err := matchesFilter(entity, f)
+	for i, record := range dbObj.data[r.collection] {
+		entity, err := r.load(record)
+		if err != nil {
+			return err
+		}
+		found, err := r.matchesFilter(entity, f)
 		if err != nil {
 			return err
 		}
@@ -82,19 +112,23 @@ func (r *Repo[T]) Delete(db *Db, f filter.Filter) error {
 	}
 
 	for i := len(indices) - 1; i >= 0; i -= 1 {
-		collection := make([]any, 0)
-		collection = append(collection, db.data[r.collection][:indices[i]]...)
-		collection = append(collection, db.data[r.collection][indices[i]+1:]...)
-		db.data[r.collection] = collection
+		collection := make([][]byte, 0)
+		collection = append(collection, dbObj.data[r.collection][:indices[i]]...)
+		collection = append(collection, dbObj.data[r.collection][indices[i]+1:]...)
+		dbObj.data[r.collection] = collection
 	}
 
 	return nil
 }
 
-func (r *Repo[T]) Count(db *Db, f filter.Filter) (int, error) {
+func (r Repo[T]) Count(db hohin.Db, f filter.Filter) (int, error) {
 	result := 0
-	for _, entity := range db.data[r.collection] {
-		found, err := matchesFilter(entity, f)
+	for _, record := range db.(*Db).data[r.collection] {
+		entity, err := r.load(record)
+		if err != nil {
+			return 0, err
+		}
+		found, err := r.matchesFilter(entity, f)
 		if err != nil {
 			return 0, err
 		}
@@ -106,19 +140,19 @@ func (r *Repo[T]) Count(db *Db, f filter.Filter) (int, error) {
 	return result, nil
 }
 
-func (r *Repo[T]) GetMany(db *Db, q query.Query) ([]T, error) {
+func (r *Repo[T]) GetMany(db hohin.Db, q query.Query) ([]T, error) {
 	result := []T{}
-	for _, entity := range db.data[r.collection] {
-		found, err := matchesFilter(entity, q.Filter)
+	for _, record := range db.(*Db).data[r.collection] {
+		entity, err := r.load(record)
+		if err != nil {
+			return nil, err
+		}
+		found, err := r.matchesFilter(entity, q.Filter)
 		if err != nil {
 			return nil, err
 		}
 		if found {
-			entityCopy, err := copyEntity(entity.(T))
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, entityCopy)
+			result = append(result, entity)
 		}
 	}
 
@@ -169,19 +203,19 @@ func (r *Repo[T]) GetMany(db *Db, q query.Query) ([]T, error) {
 	return result, nil
 }
 
-func matchesFilter(entity any, f filter.Filter) (bool, error) {
+func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 	switch f.Operation {
 	case "":
 		return true, nil
 	case operation.Not:
-		result, err := matchesFilter(entity, f.Value.(filter.Filter))
+		result, err := r.matchesFilter(entity, f.Value.(filter.Filter))
 		if err != nil {
 			return false, err
 		}
 		return !result, nil
 	case operation.And:
 		for _, filter := range f.Value.([]filter.Filter) {
-			result, err := matchesFilter(entity, filter)
+			result, err := r.matchesFilter(entity, filter)
 			if err != nil {
 				return false, err
 			}
@@ -192,7 +226,7 @@ func matchesFilter(entity any, f filter.Filter) (bool, error) {
 		return true, nil
 	case operation.Or:
 		for _, filter := range f.Value.([]filter.Filter) {
-			result, err := matchesFilter(entity, filter)
+			result, err := r.matchesFilter(entity, filter)
 			if err != nil {
 				return false, err
 			}
@@ -349,20 +383,26 @@ func matchesFilter(entity any, f filter.Filter) (bool, error) {
 	panic(fmt.Sprintf("unknown operation %s", f.Operation))
 }
 
-func (r *Repo[T]) Add(db *Db, entity T) error {
-	entities := db.data[r.collection]
-	entityCopy, err := copyEntity(entity)
+func (r *Repo[T]) Add(db hohin.Db, entity T) error {
+	dbObj := db.(*Db)
+	records := dbObj.data[r.collection]
+	record, err := r.dump(entity)
 	if err != nil {
 		return err
 	}
-	db.data[r.collection] = append(entities, entityCopy)
+	dbObj.data[r.collection] = append(records, record)
 	return nil
 }
 
-func (r *Repo[T]) Update(db *Db, f filter.Filter, entity T) error {
+func (r *Repo[T]) Update(db hohin.Db, f filter.Filter, entity T) error {
+	dbObj := db.(*Db)
 	index := -1
-	for i, entity := range db.data[r.collection] {
-		found, err := matchesFilter(entity, f)
+	for i, record := range dbObj.data[r.collection] {
+		entity, err := r.load(record)
+		if err != nil {
+			return err
+		}
+		found, err := r.matchesFilter(entity, f)
 		if err != nil {
 			return err
 		}
@@ -373,34 +413,31 @@ func (r *Repo[T]) Update(db *Db, f filter.Filter, entity T) error {
 	}
 
 	if index > -1 {
-		entityCopy, err := copyEntity(entity)
+		record, err := r.dump(entity)
 		if err != nil {
 			return err
 		}
-		db.data[r.collection][index] = entityCopy
+		dbObj.data[r.collection][index] = record
 	}
 
 	return nil
 }
 
-func copyEntity[T any](entity T) (T, error) {
-	var entityCopy T
-	entity_data, err := json.Marshal(entity)
-	if err != nil {
-		return entityCopy, err
-	}
-	err = json.Unmarshal(entity_data, &entityCopy)
-	if err != nil {
-		return entityCopy, err
-	}
-	return entityCopy, nil
+func (r *Repo[T]) CountAll(db hohin.Db) (int, error) {
+	return len(db.(*Db).data[r.collection]), nil
 }
 
-func (r *Repo[T]) CountAll(db *Db) (int, error) {
-	return len(db.data[r.collection]), nil
-}
-
-func (r *Repo[T]) Clear(db *Db) error {
-	db.data[r.collection] = nil
+func (r *Repo[T]) Clear(db hohin.Db) error {
+	db.(*Db).data[r.collection] = nil
 	return nil
+}
+
+func (r *Repo[T]) dump(entity T) ([]byte, error) {
+	return json.Marshal(entity)
+}
+
+func (r *Repo[T]) load(record []byte) (T, error) {
+	var entity T
+	err := json.Unmarshal(record, &entity)
+	return entity, err
 }

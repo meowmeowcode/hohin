@@ -1,7 +1,9 @@
 package query
 
-import "github.com/meowmeowcode/hohin/filter"
-import "github.com/meowmeowcode/hohin/order"
+import (
+	"github.com/meowmeowcode/hohin/filter"
+	"github.com/meowmeowcode/hohin/order"
+)
 
 type Query struct {
 	Filter filter.Filter

@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"errors"
 	"github.com/google/uuid"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/filter"
@@ -45,15 +46,15 @@ func usersEqual(u, u2 []User) bool {
 	return true
 }
 
-func makeDb() Db {
+func makeDb() hohin.Db {
 	return NewDb()
 }
 
-func makeRepo() Repo[User] {
+func makeRepo() hohin.Repo[User] {
 	return NewRepo[User]("users")
 }
 
-func addAlice(db *Db, repo *Repo[User]) User {
+func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
 	money, err := decimal.NewFromString("120.50")
 	if err != nil {
 		panic(err)
@@ -73,7 +74,7 @@ func addAlice(db *Db, repo *Repo[User]) User {
 	return u
 }
 
-func addBob(db *Db, repo *Repo[User]) User {
+func addBob(db hohin.Db, repo hohin.Repo[User]) User {
 	money, err := decimal.NewFromString("136.02")
 	if err != nil {
 		panic(err)
@@ -93,7 +94,7 @@ func addBob(db *Db, repo *Repo[User]) User {
 	return u
 }
 
-func addEve(db *Db, repo *Repo[User]) User {
+func addEve(db hohin.Db, repo hohin.Repo[User]) User {
 	money, err := decimal.NewFromString("168.31")
 	if err != nil {
 		panic(err)
@@ -116,10 +117,10 @@ func TestAdd(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
 	alice := User{Name: "Alice"}
-	if err := repo.Add(&db, alice); err != nil {
+	if err := repo.Add(db, alice); err != nil {
 		t.Fatal(err)
 	}
-	u, err := repo.Get(&db, filter.Eq("Name", "Alice"))
+	u, err := repo.Get(db, filter.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,23 +132,23 @@ func TestAdd(t *testing.T) {
 func TestGet(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
-	u, err := repo.Get(&db, filter.Eq("Name", "Alice"))
+	alice := addAlice(db, repo)
+	bob := addBob(db, repo)
+	u, err := repo.Get(db, filter.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&alice) {
 		t.Fatalf("%v != %v", alice, u)
 	}
-	u, err = repo.Get(&db, filter.Eq("Name", "Bob"))
+	u, err = repo.Get(db, filter.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&bob) {
 		t.Fatalf("%v != %v", bob, u)
 	}
-	_, err = repo.Get(&db, filter.Eq("Name", "Eve"))
+	_, err = repo.Get(db, filter.Eq("Name", "Eve"))
 	if err != hohin.NotFound {
 		t.Fatalf("%v != %v", err, hohin.NotFound)
 	}
@@ -156,23 +157,23 @@ func TestGet(t *testing.T) {
 func TestGetForUpdate(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
-	u, err := repo.GetForUpdate(&db, filter.Eq("Name", "Alice"))
+	alice := addAlice(db, repo)
+	bob := addBob(db, repo)
+	u, err := repo.GetForUpdate(db, filter.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&alice) {
 		t.Fatalf("%v != %v", alice, u)
 	}
-	u, err = repo.GetForUpdate(&db, filter.Eq("Name", "Bob"))
+	u, err = repo.GetForUpdate(db, filter.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&bob) {
 		t.Fatalf("%v != %v", bob, u)
 	}
-	_, err = repo.GetForUpdate(&db, filter.Eq("Name", "Eve"))
+	_, err = repo.GetForUpdate(db, filter.Eq("Name", "Eve"))
 	if err != hohin.NotFound {
 		t.Fatalf("%v != %v", err, hohin.NotFound)
 	}
@@ -181,27 +182,27 @@ func TestGetForUpdate(t *testing.T) {
 func TestExists(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	addAlice(&db, &repo)
-	addBob(&db, &repo)
-	addEve(&db, &repo)
-	if err := repo.Delete(&db, filter.Contains("Name", "e")); err != nil {
+	addAlice(db, repo)
+	addBob(db, repo)
+	addEve(db, repo)
+	if err := repo.Delete(db, filter.Contains("Name", "e")); err != nil {
 		t.Fatal(err)
 	}
-	exists, err := repo.Exists(&db, filter.Eq("Name", "Alice"))
+	exists, err := repo.Exists(db, filter.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if exists {
 		t.Fatalf("Alice is not deleted")
 	}
-	exists, err = repo.Exists(&db, filter.Eq("Name", "Bob"))
+	exists, err = repo.Exists(db, filter.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !exists {
 		t.Fatalf("Bob is deleted")
 	}
-	exists, err = repo.Exists(&db, filter.Eq("Name", "Eve"))
+	exists, err = repo.Exists(db, filter.Eq("Name", "Eve"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,21 +214,21 @@ func TestExists(t *testing.T) {
 func TestUpdate(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
+	alice := addAlice(db, repo)
+	bob := addBob(db, repo)
 	bob.Name = "Robert"
 	// TODO: replace Age with another field:
-	if err := repo.Update(&db, filter.Eq("Age", bob.Age), bob); err != nil {
+	if err := repo.Update(db, filter.Eq("Age", bob.Age), bob); err != nil {
 		t.Fatal(err)
 	}
-	u, err := repo.Get(&db, filter.Eq("Name", bob.Name))
+	u, err := repo.Get(db, filter.Eq("Name", bob.Name))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&bob) {
 		t.Fatalf("%v != %v", u, bob)
 	}
-	u, err = repo.Get(&db, filter.Eq("Name", alice.Name))
+	u, err = repo.Get(db, filter.Eq("Name", alice.Name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,15 +240,15 @@ func TestUpdate(t *testing.T) {
 func TestDelete(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	addAlice(&db, &repo)
-	exists, err := repo.Exists(&db, filter.Eq("Name", "Alice"))
+	addAlice(db, repo)
+	exists, err := repo.Exists(db, filter.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !exists {
 		t.Fatalf("%v != %v", exists, true)
 	}
-	exists, err = repo.Exists(&db, filter.Eq("Name", "Bob"))
+	exists, err = repo.Exists(db, filter.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,10 +260,10 @@ func TestDelete(t *testing.T) {
 func TestCount(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	addAlice(&db, &repo)
-	addBob(&db, &repo)
-	addEve(&db, &repo)
-	count, err := repo.Count(&db, filter.Contains("Name", "e"))
+	addAlice(db, repo)
+	addBob(db, repo)
+	addEve(db, repo)
+	count, err := repo.Count(db, filter.Contains("Name", "e"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,10 +275,10 @@ func TestCount(t *testing.T) {
 func TestLimit(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
-	addEve(&db, &repo)
-	users, err := repo.GetMany(&db, query.New().WithLimit(2))
+	alice := addAlice(db, repo)
+	bob := addBob(db, repo)
+	addEve(db, repo)
+	users, err := repo.GetMany(db, query.New().WithLimit(2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,10 +291,10 @@ func TestLimit(t *testing.T) {
 func TestOffset(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
-	eve := addEve(&db, &repo)
-	users, err := repo.GetMany(&db, query.New().WithOffset(1))
+	addAlice(db, repo)
+	bob := addBob(db, repo)
+	eve := addEve(db, repo)
+	users, err := repo.GetMany(db, query.New().WithOffset(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,11 +307,11 @@ func TestOffset(t *testing.T) {
 func TestOrder(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
-	eve := addEve(&db, &repo)
+	alice := addAlice(db, repo)
+	bob := addBob(db, repo)
+	eve := addEve(db, repo)
 
-	users, err := repo.GetMany(&db, query.New().WithOrder(order.Desc("Name")))
+	users, err := repo.GetMany(db, query.New().WithOrder(order.Desc("Name")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +321,7 @@ func TestOrder(t *testing.T) {
 	}
 
 	expectedUsers = []User{eve, alice, bob}
-	users, err = repo.GetMany(&db, query.New().WithOrder(order.Asc("Active"), order.Asc("Name")))
+	users, err = repo.GetMany(db, query.New().WithOrder(order.Asc("Active"), order.Asc("Name")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,9 +338,9 @@ type filtersTestCase struct {
 func TestFilters(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := addAlice(&db, &repo)
-	bob := addBob(&db, &repo)
-	eve := addEve(&db, &repo)
+	alice := addAlice(db, repo)
+	bob := addBob(db, repo)
+	eve := addEve(db, repo)
 	cases := []filtersTestCase{
 		// int operations:
 		filtersTestCase{
@@ -507,7 +508,7 @@ func TestFilters(t *testing.T) {
 		},
 	}
 	for _, cs := range cases {
-		result, err := repo.GetMany(&db, query.Filter(cs.filter))
+		result, err := repo.GetMany(db, query.Filter(cs.filter))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -520,10 +521,10 @@ func TestFilters(t *testing.T) {
 func TestCountAll(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	addAlice(&db, &repo)
-	addBob(&db, &repo)
-	addEve(&db, &repo)
-	count, err := repo.CountAll(&db)
+	addAlice(db, repo)
+	addBob(db, repo)
+	addEve(db, repo)
+	count, err := repo.CountAll(db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -535,17 +536,53 @@ func TestCountAll(t *testing.T) {
 func TestClear(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	addAlice(&db, &repo)
-	addBob(&db, &repo)
-	addEve(&db, &repo)
-	if err := repo.Clear(&db); err != nil {
+	addAlice(db, repo)
+	addBob(db, repo)
+	addEve(db, repo)
+	if err := repo.Clear(db); err != nil {
 		t.Fatal(err)
 	}
-	count, err := repo.CountAll(&db)
+	count, err := repo.CountAll(db)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if count != 0 {
 		t.Fatalf("%v != 0", count)
+	}
+}
+
+func TestTransaction(t *testing.T) {
+	db := makeDb()
+	repo := makeRepo()
+	addAlice(db, repo)
+	bob := addBob(db, repo)
+	addEve(db, repo)
+	err := db.Transaction(func(db hohin.Db) error {
+		repo.Delete(db, filter.Eq("Id", bob.Id))
+		return errors.New("fail")
+	})
+	if err == nil {
+		t.Fatal("Transaction didn't fail")
+	}
+	exists, err := repo.Exists(db, filter.Eq("Id", bob.Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatal("Transaction wasn't rolled back")
+	}
+	err = db.Transaction(func(db hohin.Db) error {
+		repo.Delete(db, filter.Eq("Id", bob.Id))
+		return nil
+	})
+	if err != nil {
+		t.Fatal("Transaction failed")
+	}
+	exists, err = repo.Exists(db, filter.Eq("Id", bob.Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatal("Transaction wasn't commited")
 	}
 }
