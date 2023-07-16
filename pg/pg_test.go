@@ -1,8 +1,10 @@
-package mem
+package pg
 
 import (
+	"database/sql"
 	"errors"
 	"github.com/google/uuid"
+	_ "github.com/lib/pq"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/filter"
 	"github.com/meowmeowcode/hohin/order"
@@ -18,8 +20,8 @@ type User struct {
 	Age          int
 	Active       bool
 	Weight       float64
-	RegisteredAt time.Time
 	Money        decimal.Decimal
+	RegisteredAt time.Time
 }
 
 func (u *User) Equal(u2 *User) bool {
@@ -47,14 +49,36 @@ func usersEqual(u, u2 []User) bool {
 }
 
 func makeDb() hohin.Db {
-	return NewDb()
+	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
+	if err != nil {
+		panic(err)
+	}
+	_, err = pool.Exec(`
+CREATE TABLE IF NOT EXISTS users (
+    Id uuid PRIMARY KEY,
+    Name text NOT NULL,
+    Age bigint NOT NULL,
+    Active boolean NOT NULL,
+    Weight float8 NOT NULL,
+    Money decimal NOT NULL,
+    RegisteredAt timestamptz NOT NULL
+)
+	`)
+	if err != nil {
+		panic(err)
+	}
+	_, err = pool.Exec(`DELETE FROM users`)
+	if err != nil {
+		panic(err)
+	}
+	return NewDb(pool)
 }
 
-func makeRepo() hohin.Repo[User] {
-	return NewRepo[User]("users")
+func makeRepo() *Repo[User] {
+	return NewRepo(Conf[User]{Table: "users"})
 }
 
-func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
+func addAlice(db hohin.Db, repo *Repo[User]) User {
 	money, err := decimal.NewFromString("120.50")
 	if err != nil {
 		panic(err)
@@ -74,7 +98,7 @@ func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
 	return u
 }
 
-func addBob(db hohin.Db, repo hohin.Repo[User]) User {
+func addBob(db hohin.Db, repo *Repo[User]) User {
 	money, err := decimal.NewFromString("136.02")
 	if err != nil {
 		panic(err)
@@ -94,7 +118,7 @@ func addBob(db hohin.Db, repo hohin.Repo[User]) User {
 	return u
 }
 
-func addEve(db hohin.Db, repo hohin.Repo[User]) User {
+func addEve(db hohin.Db, repo *Repo[User]) User {
 	money, err := decimal.NewFromString("168.31")
 	if err != nil {
 		panic(err)

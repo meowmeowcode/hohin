@@ -52,10 +52,10 @@ func NewRepo[T any](collection string) *Repo[T] {
 	return &Repo[T]{collection: collection}
 }
 
-func (r *Repo[T]) Get(db hohin.Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) Get(d hohin.Db, f filter.Filter) (T, error) {
 	var zero T
-
-	for _, record := range db.(*Db).data[r.collection] {
+	db := d.(*Db)
+	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
 			return zero, err
@@ -68,16 +68,16 @@ func (r *Repo[T]) Get(db hohin.Db, f filter.Filter) (T, error) {
 			return entity, nil
 		}
 	}
-
 	return zero, hohin.NotFound
 }
 
-func (r *Repo[T]) GetForUpdate(db hohin.Db, f filter.Filter) (T, error) {
-	return r.Get(db, f)
+func (r *Repo[T]) GetForUpdate(d hohin.Db, f filter.Filter) (T, error) {
+	return r.Get(d, f)
 }
 
-func (r *Repo[T]) Exists(db hohin.Db, f filter.Filter) (bool, error) {
-	for _, record := range db.(*Db).data[r.collection] {
+func (r *Repo[T]) Exists(d hohin.Db, f filter.Filter) (bool, error) {
+	db := d.(*Db)
+	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
 			return false, err
@@ -90,14 +90,13 @@ func (r *Repo[T]) Exists(db hohin.Db, f filter.Filter) (bool, error) {
 			return true, nil
 		}
 	}
-
 	return false, nil
 }
 
-func (r *Repo[T]) Delete(db hohin.Db, f filter.Filter) error {
-	dbObj := db.(*Db)
+func (r *Repo[T]) Delete(d hohin.Db, f filter.Filter) error {
+	db := d.(*Db)
 	indices := make([]int, 0)
-	for i, record := range dbObj.data[r.collection] {
+	for i, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
 			return err
@@ -113,17 +112,18 @@ func (r *Repo[T]) Delete(db hohin.Db, f filter.Filter) error {
 
 	for i := len(indices) - 1; i >= 0; i -= 1 {
 		collection := make([][]byte, 0)
-		collection = append(collection, dbObj.data[r.collection][:indices[i]]...)
-		collection = append(collection, dbObj.data[r.collection][indices[i]+1:]...)
-		dbObj.data[r.collection] = collection
+		collection = append(collection, db.data[r.collection][:indices[i]]...)
+		collection = append(collection, db.data[r.collection][indices[i]+1:]...)
+		db.data[r.collection] = collection
 	}
 
 	return nil
 }
 
-func (r Repo[T]) Count(db hohin.Db, f filter.Filter) (int, error) {
+func (r Repo[T]) Count(d hohin.Db, f filter.Filter) (int, error) {
+	db := d.(*Db)
 	result := 0
-	for _, record := range db.(*Db).data[r.collection] {
+	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
 			return 0, err
@@ -136,13 +136,13 @@ func (r Repo[T]) Count(db hohin.Db, f filter.Filter) (int, error) {
 			result += 1
 		}
 	}
-
 	return result, nil
 }
 
-func (r *Repo[T]) GetMany(db hohin.Db, q query.Query) ([]T, error) {
+func (r *Repo[T]) GetMany(d hohin.Db, q query.Query) ([]T, error) {
+	db := d.(*Db)
 	result := []T{}
-	for _, record := range db.(*Db).data[r.collection] {
+	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
 			return nil, err
@@ -383,21 +383,21 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 	panic(fmt.Sprintf("unknown operation %s", f.Operation))
 }
 
-func (r *Repo[T]) Add(db hohin.Db, entity T) error {
-	dbObj := db.(*Db)
-	records := dbObj.data[r.collection]
+func (r *Repo[T]) Add(d hohin.Db, entity T) error {
+	db := d.(*Db)
+	records := db.data[r.collection]
 	record, err := r.dump(entity)
 	if err != nil {
 		return err
 	}
-	dbObj.data[r.collection] = append(records, record)
+	db.data[r.collection] = append(records, record)
 	return nil
 }
 
-func (r *Repo[T]) Update(db hohin.Db, f filter.Filter, entity T) error {
-	dbObj := db.(*Db)
+func (r *Repo[T]) Update(d hohin.Db, f filter.Filter, entity T) error {
+	db := d.(*Db)
 	index := -1
-	for i, record := range dbObj.data[r.collection] {
+	for i, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
 			return err
@@ -417,18 +417,20 @@ func (r *Repo[T]) Update(db hohin.Db, f filter.Filter, entity T) error {
 		if err != nil {
 			return err
 		}
-		dbObj.data[r.collection][index] = record
+		db.data[r.collection][index] = record
 	}
 
 	return nil
 }
 
-func (r *Repo[T]) CountAll(db hohin.Db) (int, error) {
-	return len(db.(*Db).data[r.collection]), nil
+func (r *Repo[T]) CountAll(d hohin.Db) (int, error) {
+	db := d.(*Db)
+	return len(db.data[r.collection]), nil
 }
 
-func (r *Repo[T]) Clear(db hohin.Db) error {
-	db.(*Db).data[r.collection] = nil
+func (r *Repo[T]) Clear(d hohin.Db) error {
+	db := d.(*Db)
+	db.data[r.collection] = nil
 	return nil
 }
 
