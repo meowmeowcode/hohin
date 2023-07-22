@@ -1,4 +1,4 @@
-package order
+package hohin
 
 type Order struct {
 	Field string

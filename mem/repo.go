@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/meowmeowcode/hohin"
-	"github.com/meowmeowcode/hohin/filter"
-	"github.com/meowmeowcode/hohin/filter/operation"
-	"github.com/meowmeowcode/hohin/query"
+	"github.com/meowmeowcode/hohin/operations"
 	"github.com/shopspring/decimal"
 	"reflect"
 	"sort"
@@ -52,7 +50,7 @@ func NewRepo[T any](collection string) *Repo[T] {
 	return &Repo[T]{collection: collection}
 }
 
-func (r *Repo[T]) Get(d hohin.Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) Get(d hohin.Db, f hohin.Filter) (T, error) {
 	var zero T
 	db := d.(*Db)
 	for _, record := range db.data[r.collection] {
@@ -71,11 +69,11 @@ func (r *Repo[T]) Get(d hohin.Db, f filter.Filter) (T, error) {
 	return zero, hohin.NotFound
 }
 
-func (r *Repo[T]) GetForUpdate(d hohin.Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) GetForUpdate(d hohin.Db, f hohin.Filter) (T, error) {
 	return r.Get(d, f)
 }
 
-func (r *Repo[T]) Exists(d hohin.Db, f filter.Filter) (bool, error) {
+func (r *Repo[T]) Exists(d hohin.Db, f hohin.Filter) (bool, error) {
 	db := d.(*Db)
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
@@ -93,7 +91,7 @@ func (r *Repo[T]) Exists(d hohin.Db, f filter.Filter) (bool, error) {
 	return false, nil
 }
 
-func (r *Repo[T]) Delete(d hohin.Db, f filter.Filter) error {
+func (r *Repo[T]) Delete(d hohin.Db, f hohin.Filter) error {
 	db := d.(*Db)
 	indices := make([]int, 0)
 	for i, record := range db.data[r.collection] {
@@ -120,7 +118,7 @@ func (r *Repo[T]) Delete(d hohin.Db, f filter.Filter) error {
 	return nil
 }
 
-func (r Repo[T]) Count(d hohin.Db, f filter.Filter) (int, error) {
+func (r Repo[T]) Count(d hohin.Db, f hohin.Filter) (int, error) {
 	db := d.(*Db)
 	result := 0
 	for _, record := range db.data[r.collection] {
@@ -139,7 +137,7 @@ func (r Repo[T]) Count(d hohin.Db, f filter.Filter) (int, error) {
 	return result, nil
 }
 
-func (r *Repo[T]) GetMany(d hohin.Db, q query.Query) ([]T, error) {
+func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 	db := d.(*Db)
 	result := []T{}
 	for _, record := range db.data[r.collection] {
@@ -203,18 +201,18 @@ func (r *Repo[T]) GetMany(d hohin.Db, q query.Query) ([]T, error) {
 	return result, nil
 }
 
-func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
+func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 	switch f.Operation {
 	case "":
 		return true, nil
-	case operation.Not:
-		result, err := r.matchesFilter(entity, f.Value.(filter.Filter))
+	case operations.Not:
+		result, err := r.matchesFilter(entity, f.Value.(hohin.Filter))
 		if err != nil {
 			return false, err
 		}
 		return !result, nil
-	case operation.And:
-		for _, filter := range f.Value.([]filter.Filter) {
+	case operations.And:
+		for _, filter := range f.Value.([]hohin.Filter) {
 			result, err := r.matchesFilter(entity, filter)
 			if err != nil {
 				return false, err
@@ -224,8 +222,8 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 			}
 		}
 		return true, nil
-	case operation.Or:
-		for _, filter := range f.Value.([]filter.Filter) {
+	case operations.Or:
+		for _, filter := range f.Value.([]hohin.Filter) {
 			result, err := r.matchesFilter(entity, filter)
 			if err != nil {
 				return false, err
@@ -241,7 +239,7 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 	field := s.FieldByName(f.Field)
 
 	switch f.Operation {
-	case operation.Eq:
+	case operations.Eq:
 		switch val := f.Value.(type) {
 		case int:
 			return field.Int() == int64(val), nil
@@ -260,7 +258,7 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Ne:
+	case operations.Ne:
 		switch val := f.Value.(type) {
 		case int:
 			return field.Int() != int64(val), nil
@@ -279,7 +277,7 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Lt:
+	case operations.Lt:
 		switch val := f.Value.(type) {
 		case int:
 			return field.Int() < int64(val), nil
@@ -292,7 +290,7 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Gt:
+	case operations.Gt:
 		switch val := f.Value.(type) {
 		case int:
 			return field.Int() > int64(val), nil
@@ -305,7 +303,7 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Lte:
+	case operations.Lte:
 		switch val := f.Value.(type) {
 		case int:
 			return field.Int() <= int64(val), nil
@@ -318,7 +316,7 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Gte:
+	case operations.Gte:
 		switch val := f.Value.(type) {
 		case int:
 			return field.Int() >= int64(val), nil
@@ -331,28 +329,28 @@ func (r *Repo[T]) matchesFilter(entity T, f filter.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.HasPrefix:
+	case operations.HasPrefix:
 		switch val := f.Value.(type) {
 		case string:
 			return strings.HasPrefix(field.String(), val), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.HasSuffix:
+	case operations.HasSuffix:
 		switch val := f.Value.(type) {
 		case string:
 			return strings.HasSuffix(field.String(), val), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Contains:
+	case operations.Contains:
 		switch val := f.Value.(type) {
 		case string:
 			return strings.Contains(field.String(), val), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.In:
+	case operations.In:
 		switch val := f.Value.(type) {
 		case []string:
 			for _, x := range val {
@@ -394,7 +392,7 @@ func (r *Repo[T]) Add(d hohin.Db, entity T) error {
 	return nil
 }
 
-func (r *Repo[T]) Update(d hohin.Db, f filter.Filter, entity T) error {
+func (r *Repo[T]) Update(d hohin.Db, f hohin.Filter, entity T) error {
 	db := d.(*Db)
 	index := -1
 	for i, record := range db.data[r.collection] {

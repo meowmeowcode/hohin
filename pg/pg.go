@@ -6,9 +6,7 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	"github.com/meowmeowcode/hohin"
-	"github.com/meowmeowcode/hohin/filter"
-	"github.com/meowmeowcode/hohin/filter/operation"
-	"github.com/meowmeowcode/hohin/query"
+	"github.com/meowmeowcode/hohin/operations"
 	"reflect"
 	"strings"
 )
@@ -143,7 +141,7 @@ func NewRepo[T any](conf Conf[T]) *Repo[T] {
 	return r
 }
 
-func (r *Repo[T]) Get(d hohin.Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) Get(d hohin.Db, f hohin.Filter) (T, error) {
 	var zero T
 	if r.load == nil {
 		return zero, errors.New("repository isn't configured to load entities")
@@ -165,37 +163,37 @@ func (r *Repo[T]) Get(d hohin.Db, f filter.Filter) (T, error) {
 	return entity, nil
 }
 
-func applyFilter(s *Sql, f filter.Filter) error {
+func applyFilter(s *Sql, f hohin.Filter) error {
 	switch f.Operation {
-	case operation.Not:
+	case operations.Not:
 		s.Add("NOT (")
-		applyFilter(s, f.Value.(filter.Filter))
+		applyFilter(s, f.Value.(hohin.Filter))
 		s.Add(")")
-	case operation.And:
-		for _, filter := range f.Value.([]filter.Filter) {
+	case operations.And:
+		for _, filter := range f.Value.([]hohin.Filter) {
 			applyFilter(s, filter)
 			s.Add(" AND ")
 		}
 		s.Pop()
-	case operation.Or:
-		for _, filter := range f.Value.([]filter.Filter) {
+	case operations.Or:
+		for _, filter := range f.Value.([]hohin.Filter) {
 			applyFilter(s, filter)
 			s.Add(" OR ")
 		}
 		s.Pop()
-	case operation.Eq:
+	case operations.Eq:
 		s.Add(f.Field, " = ").AddParam(f.Value)
-	case operation.Ne:
+	case operations.Ne:
 		s.Add(f.Field, " != ").AddParam(f.Value)
-	case operation.Lt:
+	case operations.Lt:
 		s.Add(f.Field, " < ").AddParam(f.Value)
-	case operation.Gt:
+	case operations.Gt:
 		s.Add(f.Field, " > ").AddParam(f.Value)
-	case operation.Lte:
+	case operations.Lte:
 		s.Add(f.Field, " <= ").AddParam(f.Value)
-	case operation.Gte:
+	case operations.Gte:
 		s.Add(f.Field, " >= ").AddParam(f.Value)
-	case operation.In:
+	case operations.In:
 		switch val := f.Value.(type) {
 		case []int:
 			s.Add(f.Field, " IN (")
@@ -224,11 +222,11 @@ func applyFilter(s *Sql, f filter.Filter) error {
 		default:
 			return fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operation.Contains:
+	case operations.Contains:
 		s.Add(f.Field, " like '%' || ").AddParam(f.Value).Add(" || '%' ")
-	case operation.HasPrefix:
+	case operations.HasPrefix:
 		s.Add(f.Field, " like ").AddParam(f.Value).Add(" || '%' ")
-	case operation.HasSuffix:
+	case operations.HasSuffix:
 		s.Add(f.Field, " like '%' || ").AddParam(f.Value)
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
@@ -236,7 +234,7 @@ func applyFilter(s *Sql, f filter.Filter) error {
 	return nil
 }
 
-func (r *Repo[T]) GetForUpdate(d hohin.Db, f filter.Filter) (T, error) {
+func (r *Repo[T]) GetForUpdate(d hohin.Db, f hohin.Filter) (T, error) {
 	var zero T
 	if r.load == nil {
 		return zero, errors.New("repository isn't configured to load entities")
@@ -259,7 +257,7 @@ func (r *Repo[T]) GetForUpdate(d hohin.Db, f filter.Filter) (T, error) {
 	return entity, nil
 }
 
-func (r *Repo[T]) Exists(d hohin.Db, f filter.Filter) (bool, error) {
+func (r *Repo[T]) Exists(d hohin.Db, f hohin.Filter) (bool, error) {
 	var result bool
 	db := d.(*Db)
 	sql := NewSql("SELECT EXISTS (", r.query, " WHERE ")
@@ -274,7 +272,7 @@ func (r *Repo[T]) Exists(d hohin.Db, f filter.Filter) (bool, error) {
 	return result, err
 }
 
-func (r *Repo[T]) Delete(d hohin.Db, f filter.Filter) error {
+func (r *Repo[T]) Delete(d hohin.Db, f hohin.Filter) error {
 	db := d.(*Db)
 	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
 	applyFilter(sql, f)
@@ -319,7 +317,7 @@ func (r *Repo[T]) Add(d hohin.Db, entity T) error {
 	return nil
 }
 
-func (r *Repo[T]) Update(d hohin.Db, f filter.Filter, entity T) error {
+func (r *Repo[T]) Update(d hohin.Db, f hohin.Filter, entity T) error {
 	db := d.(*Db)
 	data, err := r.dump(entity)
 	if err != nil {
@@ -346,7 +344,7 @@ func (r *Repo[T]) Update(d hohin.Db, f filter.Filter, entity T) error {
 	return nil
 }
 
-func (r Repo[T]) Count(d hohin.Db, f filter.Filter) (int, error) {
+func (r Repo[T]) Count(d hohin.Db, f hohin.Filter) (int, error) {
 	var result int
 	db := d.(*Db)
 	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
@@ -361,7 +359,7 @@ func (r Repo[T]) Count(d hohin.Db, f filter.Filter) (int, error) {
 	return result, err
 }
 
-func (r *Repo[T]) GetMany(d hohin.Db, q query.Query) ([]T, error) {
+func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 	db := d.(*Db)
 	result := make([]T, 0)
 	sql := NewSql(r.query)

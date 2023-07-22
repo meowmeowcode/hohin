@@ -5,7 +5,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/meowmeowcode/hohin"
-	"github.com/meowmeowcode/hohin/filter"
 	"reflect"
 	"testing"
 )
@@ -103,14 +102,14 @@ func TestOneToMany(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := repo.Get(db, filter.Eq("Name", "Bob"))
+	b, err := repo.Get(db, hohin.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !b.Equal(&bob) {
 		t.Fatalf("%v != %v", b, bob)
 	}
-	a, err := repo.Get(db, filter.Eq("Name", "Alice"))
+	a, err := repo.Get(db, hohin.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -2,20 +2,17 @@ package hohin
 
 import "errors"
 
-import "github.com/meowmeowcode/hohin/filter"
-import "github.com/meowmeowcode/hohin/query"
-
 var NotFound error = errors.New("object not found")
 
 type Repo[T any] interface {
-	Get(Db, filter.Filter) (T, error)
-	GetForUpdate(Db, filter.Filter) (T, error)
-	GetMany(Db, query.Query) ([]T, error)
+	Get(Db, Filter) (T, error)
+	GetForUpdate(Db, Filter) (T, error)
+	GetMany(Db, Query) ([]T, error)
 	Add(Db, T) error
-	Update(Db, filter.Filter, T) error
-	Delete(Db, filter.Filter) error
-	Exists(Db, filter.Filter) (bool, error)
-	Count(Db, filter.Filter) (int, error)
+	Update(Db, Filter, T) error
+	Delete(Db, Filter) error
+	Exists(Db, Filter) (bool, error)
+	Count(Db, Filter) (int, error)
 	CountAll(Db) (int, error)
 	Clear(Db) error
 }

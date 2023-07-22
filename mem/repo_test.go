@@ -4,9 +4,6 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/meowmeowcode/hohin"
-	"github.com/meowmeowcode/hohin/filter"
-	"github.com/meowmeowcode/hohin/order"
-	"github.com/meowmeowcode/hohin/query"
 	"github.com/shopspring/decimal"
 	"testing"
 	"time"
@@ -18,8 +15,8 @@ type User struct {
 	Age          int
 	Active       bool
 	Weight       float64
-	RegisteredAt time.Time
 	Money        decimal.Decimal
+	RegisteredAt time.Time
 }
 
 func (u *User) Equal(u2 *User) bool {
@@ -120,7 +117,7 @@ func TestAdd(t *testing.T) {
 	if err := repo.Add(db, alice); err != nil {
 		t.Fatal(err)
 	}
-	u, err := repo.Get(db, filter.Eq("Name", "Alice"))
+	u, err := repo.Get(db, hohin.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,21 +131,21 @@ func TestGet(t *testing.T) {
 	repo := makeRepo()
 	alice := addAlice(db, repo)
 	bob := addBob(db, repo)
-	u, err := repo.Get(db, filter.Eq("Name", "Alice"))
+	u, err := repo.Get(db, hohin.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&alice) {
 		t.Fatalf("%v != %v", alice, u)
 	}
-	u, err = repo.Get(db, filter.Eq("Name", "Bob"))
+	u, err = repo.Get(db, hohin.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&bob) {
 		t.Fatalf("%v != %v", bob, u)
 	}
-	_, err = repo.Get(db, filter.Eq("Name", "Eve"))
+	_, err = repo.Get(db, hohin.Eq("Name", "Eve"))
 	if err != hohin.NotFound {
 		t.Fatalf("%v != %v", err, hohin.NotFound)
 	}
@@ -159,21 +156,21 @@ func TestGetForUpdate(t *testing.T) {
 	repo := makeRepo()
 	alice := addAlice(db, repo)
 	bob := addBob(db, repo)
-	u, err := repo.GetForUpdate(db, filter.Eq("Name", "Alice"))
+	u, err := repo.GetForUpdate(db, hohin.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&alice) {
 		t.Fatalf("%v != %v", alice, u)
 	}
-	u, err = repo.GetForUpdate(db, filter.Eq("Name", "Bob"))
+	u, err = repo.GetForUpdate(db, hohin.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&bob) {
 		t.Fatalf("%v != %v", bob, u)
 	}
-	_, err = repo.GetForUpdate(db, filter.Eq("Name", "Eve"))
+	_, err = repo.GetForUpdate(db, hohin.Eq("Name", "Eve"))
 	if err != hohin.NotFound {
 		t.Fatalf("%v != %v", err, hohin.NotFound)
 	}
@@ -185,24 +182,24 @@ func TestExists(t *testing.T) {
 	addAlice(db, repo)
 	addBob(db, repo)
 	addEve(db, repo)
-	if err := repo.Delete(db, filter.Contains("Name", "e")); err != nil {
+	if err := repo.Delete(db, hohin.Contains("Name", "e")); err != nil {
 		t.Fatal(err)
 	}
-	exists, err := repo.Exists(db, filter.Eq("Name", "Alice"))
+	exists, err := repo.Exists(db, hohin.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if exists {
 		t.Fatalf("Alice is not deleted")
 	}
-	exists, err = repo.Exists(db, filter.Eq("Name", "Bob"))
+	exists, err = repo.Exists(db, hohin.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !exists {
 		t.Fatalf("Bob is deleted")
 	}
-	exists, err = repo.Exists(db, filter.Eq("Name", "Eve"))
+	exists, err = repo.Exists(db, hohin.Eq("Name", "Eve"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,17 +214,17 @@ func TestUpdate(t *testing.T) {
 	alice := addAlice(db, repo)
 	bob := addBob(db, repo)
 	bob.Name = "Robert"
-	if err := repo.Update(db, filter.Eq("Id", bob.Id), bob); err != nil {
+	if err := repo.Update(db, hohin.Eq("Id", bob.Id), bob); err != nil {
 		t.Fatal(err)
 	}
-	u, err := repo.Get(db, filter.Eq("Name", bob.Name))
+	u, err := repo.Get(db, hohin.Eq("Name", bob.Name))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !u.Equal(&bob) {
 		t.Fatalf("%v != %v", u, bob)
 	}
-	u, err = repo.Get(db, filter.Eq("Name", alice.Name))
+	u, err = repo.Get(db, hohin.Eq("Name", alice.Name))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,14 +237,14 @@ func TestDelete(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
 	addAlice(db, repo)
-	exists, err := repo.Exists(db, filter.Eq("Name", "Alice"))
+	exists, err := repo.Exists(db, hohin.Eq("Name", "Alice"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !exists {
 		t.Fatalf("%v != %v", exists, true)
 	}
-	exists, err = repo.Exists(db, filter.Eq("Name", "Bob"))
+	exists, err = repo.Exists(db, hohin.Eq("Name", "Bob"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -262,7 +259,7 @@ func TestCount(t *testing.T) {
 	addAlice(db, repo)
 	addBob(db, repo)
 	addEve(db, repo)
-	count, err := repo.Count(db, filter.Contains("Name", "e"))
+	count, err := repo.Count(db, hohin.Contains("Name", "e"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +274,7 @@ func TestLimit(t *testing.T) {
 	alice := addAlice(db, repo)
 	bob := addBob(db, repo)
 	addEve(db, repo)
-	users, err := repo.GetMany(db, query.New().WithLimit(2))
+	users, err := repo.GetMany(db, hohin.Query{Limit: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +290,7 @@ func TestOffset(t *testing.T) {
 	addAlice(db, repo)
 	bob := addBob(db, repo)
 	eve := addEve(db, repo)
-	users, err := repo.GetMany(db, query.New().WithOffset(1))
+	users, err := repo.GetMany(db, hohin.Query{Offset: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +307,7 @@ func TestOrder(t *testing.T) {
 	bob := addBob(db, repo)
 	eve := addEve(db, repo)
 
-	users, err := repo.GetMany(db, query.New().WithOrder(order.Desc("Name")))
+	users, err := repo.GetMany(db, hohin.Query{}.OrderBy(hohin.Desc("Name")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -320,7 +317,7 @@ func TestOrder(t *testing.T) {
 	}
 
 	expectedUsers = []User{eve, alice, bob}
-	users, err = repo.GetMany(db, query.New().WithOrder(order.Asc("Active"), order.Asc("Name")))
+	users, err = repo.GetMany(db, hohin.Query{}.OrderBy(hohin.Asc("Active"), hohin.Asc("Name")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,176 +333,176 @@ func TestFilters(t *testing.T) {
 	bob := addBob(db, repo)
 	eve := addEve(db, repo)
 	cases := []struct {
-		filter filter.Filter
+		filter hohin.Filter
 		result []User
 	}{
 		// int operations:
 		{
-			filter: filter.Eq("Age", eve.Age),
+			filter: hohin.Eq("Age", eve.Age),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Ne("Age", eve.Age),
+			filter: hohin.Ne("Age", eve.Age),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Lt("Age", bob.Age),
+			filter: hohin.Lt("Age", bob.Age),
 			result: []User{alice},
 		},
 		{
-			filter: filter.Gt("Age", bob.Age),
+			filter: hohin.Gt("Age", bob.Age),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Lte("Age", bob.Age),
+			filter: hohin.Lte("Age", bob.Age),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Gte("Age", bob.Age),
+			filter: hohin.Gte("Age", bob.Age),
 			result: []User{bob, eve},
 		},
 		{
-			filter: filter.In("Age", []int{alice.Age, eve.Age}),
+			filter: hohin.In("Age", []int{alice.Age, eve.Age}),
 			result: []User{alice, eve},
 		},
 		// float64 operations:
 		{
-			filter: filter.Eq("Weight", bob.Weight),
+			filter: hohin.Eq("Weight", bob.Weight),
 			result: []User{bob},
 		},
 		{
-			filter: filter.Ne("Weight", bob.Weight),
+			filter: hohin.Ne("Weight", bob.Weight),
 			result: []User{alice, eve},
 		},
 		{
-			filter: filter.Lt("Weight", bob.Weight),
+			filter: hohin.Lt("Weight", bob.Weight),
 			result: []User{alice},
 		},
 		{
-			filter: filter.Gt("Weight", bob.Weight),
+			filter: hohin.Gt("Weight", bob.Weight),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Lte("Weight", bob.Weight),
+			filter: hohin.Lte("Weight", bob.Weight),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Gte("Weight", bob.Weight),
+			filter: hohin.Gte("Weight", bob.Weight),
 			result: []User{bob, eve},
 		},
 		{
-			filter: filter.In("Weight", []float64{alice.Weight, eve.Weight}),
+			filter: hohin.In("Weight", []float64{alice.Weight, eve.Weight}),
 			result: []User{alice, eve},
 		},
 		// decimal operations:
 		{
-			filter: filter.Eq("Money", eve.Money),
+			filter: hohin.Eq("Money", eve.Money),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Ne("Money", eve.Money),
+			filter: hohin.Ne("Money", eve.Money),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Lt("Money", bob.Money),
+			filter: hohin.Lt("Money", bob.Money),
 			result: []User{alice},
 		},
 		{
-			filter: filter.Gt("Money", bob.Money),
+			filter: hohin.Gt("Money", bob.Money),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Lte("Money", bob.Money),
+			filter: hohin.Lte("Money", bob.Money),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Gte("Money", bob.Money),
+			filter: hohin.Gte("Money", bob.Money),
 			result: []User{bob, eve},
 		},
 		// bool operations:
 		{
-			filter: filter.Eq("Active", true),
+			filter: hohin.Eq("Active", true),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Ne("Active", true),
+			filter: hohin.Ne("Active", true),
 			result: []User{eve},
 		},
 		// string operations:
 		{
-			filter: filter.Eq("Name", "Bob"),
+			filter: hohin.Eq("Name", "Bob"),
 			result: []User{bob},
 		},
 		{
-			filter: filter.Ne("Name", "Bob"),
+			filter: hohin.Ne("Name", "Bob"),
 			result: []User{alice, eve},
 		},
 		{
-			filter: filter.In("Name", []string{"Alice", "Bob"}),
+			filter: hohin.In("Name", []string{"Alice", "Bob"}),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.HasPrefix("Name", "A"),
+			filter: hohin.HasPrefix("Name", "A"),
 			result: []User{alice},
 		},
 		{
-			filter: filter.HasSuffix("Name", "e"),
+			filter: hohin.HasSuffix("Name", "e"),
 			result: []User{alice, eve},
 		},
 		{
-			filter: filter.Contains("Name", "o"),
+			filter: hohin.Contains("Name", "o"),
 			result: []User{bob},
 		},
 		// time.Time operations:
 		{
-			filter: filter.Eq("RegisteredAt", eve.RegisteredAt),
+			filter: hohin.Eq("RegisteredAt", eve.RegisteredAt),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Ne("RegisteredAt", eve.RegisteredAt),
+			filter: hohin.Ne("RegisteredAt", eve.RegisteredAt),
 			result: []User{alice, bob},
 		},
 		{
-			filter: filter.Lt("RegisteredAt", alice.RegisteredAt),
+			filter: hohin.Lt("RegisteredAt", alice.RegisteredAt),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Gt("RegisteredAt", alice.RegisteredAt),
+			filter: hohin.Gt("RegisteredAt", alice.RegisteredAt),
 			result: []User{bob},
 		},
 		{
-			filter: filter.Lte("RegisteredAt", alice.RegisteredAt),
+			filter: hohin.Lte("RegisteredAt", alice.RegisteredAt),
 			result: []User{alice, eve},
 		},
 		{
-			filter: filter.Gte("RegisteredAt", alice.RegisteredAt),
+			filter: hohin.Gte("RegisteredAt", alice.RegisteredAt),
 			result: []User{alice, bob},
 		},
 		// uuid operations:
 		{
-			filter: filter.Eq("Id", eve.Id),
+			filter: hohin.Eq("Id", eve.Id),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Ne("Id", eve.Id),
+			filter: hohin.Ne("Id", eve.Id),
 			result: []User{alice, bob},
 		},
 		// Not, And, Or:
 		{
-			filter: filter.Not(filter.Contains("Name", "e")),
+			filter: hohin.Not(hohin.Contains("Name", "e")),
 			result: []User{bob},
 		},
 		{
-			filter: filter.And(filter.HasPrefix("Name", "E"), filter.HasSuffix("Name", "e")),
+			filter: hohin.And(hohin.HasPrefix("Name", "E"), hohin.HasSuffix("Name", "e")),
 			result: []User{eve},
 		},
 		{
-			filter: filter.Or(filter.Eq("Name", "Eve"), filter.Eq("Name", "Alice")),
+			filter: hohin.Or(hohin.Eq("Name", "Eve"), hohin.Eq("Name", "Alice")),
 			result: []User{alice, eve},
 		},
 	}
 	for _, cs := range cases {
-		result, err := repo.GetMany(db, query.Filter(cs.filter))
+		result, err := repo.GetMany(db, hohin.Query{Filter: cs.filter})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -555,13 +552,13 @@ func TestTransaction(t *testing.T) {
 	bob := addBob(db, repo)
 	addEve(db, repo)
 	err := db.Transaction(func(db hohin.Db) error {
-		repo.Delete(db, filter.Eq("Id", bob.Id))
+		repo.Delete(db, hohin.Eq("Id", bob.Id))
 		return errors.New("fail")
 	})
 	if err == nil {
 		t.Fatal("Transaction didn't fail")
 	}
-	exists, err := repo.Exists(db, filter.Eq("Id", bob.Id))
+	exists, err := repo.Exists(db, hohin.Eq("Id", bob.Id))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -569,13 +566,13 @@ func TestTransaction(t *testing.T) {
 		t.Fatal("Transaction wasn't rolled back")
 	}
 	err = db.Transaction(func(db hohin.Db) error {
-		repo.Delete(db, filter.Eq("Id", bob.Id))
+		repo.Delete(db, hohin.Eq("Id", bob.Id))
 		return nil
 	})
 	if err != nil {
 		t.Fatal("Transaction failed")
 	}
-	exists, err = repo.Exists(db, filter.Eq("Id", bob.Id))
+	exists, err = repo.Exists(db, hohin.Eq("Id", bob.Id))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package operation
+package operations
 
 type Operation string
 
