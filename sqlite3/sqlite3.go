@@ -1,18 +1,30 @@
-package pg
+package sqlite3
 
 import (
 	"fmt"
 	"github.com/meowmeowcode/hohin/sqldb"
+	"math"
+	"time"
 )
 
 type Dialect struct{}
 
-func (d Dialect) ProcessParam(p any, number int) (string, any) {
-	return fmt.Sprintf("$%d", number), p
+func (d Dialect) ProcessParam(p any, _ int) (string, any) {
+	if param, ok := p.(time.Time); ok {
+		text, err := param.MarshalText()
+		if err != nil {
+			panic(err)
+		}
+		return "?", string(text)
+	}
+	return "?", p
 }
 
 func (d Dialect) LimitAndOffset(l, o int) string {
 	result := ""
+	if l == 0 && o > 0 {
+		l = math.MaxInt64
+	}
 	if l > 0 {
 		result += fmt.Sprintf(" LIMIT %d", l)
 	}
@@ -23,7 +35,7 @@ func (d Dialect) LimitAndOffset(l, o int) string {
 }
 
 func (d Dialect) ForUpdate() string {
-	return "FOR UPDATE"
+	return ""
 }
 
 var dialect Dialect

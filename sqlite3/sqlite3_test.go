@@ -1,10 +1,10 @@
-package pg
+package sqlite3
 
 import (
 	"database/sql"
 	"errors"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"github.com/shopspring/decimal"
@@ -47,7 +47,7 @@ func usersEqual(u, u2 []User) bool {
 }
 
 func makeDb() hohin.Db {
-	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
+	pool, err := sql.Open("sqlite3", ":memory:")
 	if err != nil {
 		panic(err)
 	}
@@ -73,7 +73,18 @@ CREATE TABLE IF NOT EXISTS users (
 }
 
 func makeRepo() hohin.Repo[User] {
-	return NewRepo(sqldb.Conf[User]{Table: "users"})
+	return NewRepo(sqldb.Conf[User]{
+		Table: "users",
+		Load: func(row sqldb.Scanner) (User, error) {
+			var u User
+			var registeredAt string
+			err := row.Scan(&u.Id, &u.Name, &u.Age, &u.Active, &u.Weight, &u.Money, &registeredAt)
+			if registeredAt != "" {
+				err = u.RegisteredAt.UnmarshalText([]byte(registeredAt))
+			}
+			return u, err
+		},
+	})
 }
 
 func addAlice(db hohin.Db, repo hohin.Repo[User]) User {

@@ -1,17 +1,23 @@
-package pg
+package sqldb
 
 import (
-	"fmt"
 	"strings"
 )
 
-type Sql struct {
-	strs   []string
-	params []any
+type Dialect interface {
+	ProcessParam(p any, number int) (string, any)
+	LimitAndOffset(l int, o int) string
+	ForUpdate() string
 }
 
-func NewSql(strs ...string) *Sql {
-	s := &Sql{}
+type Sql struct {
+	dialect Dialect
+	strs    []string
+	params  []any
+}
+
+func NewSql(d Dialect, strs ...string) *Sql {
+	s := &Sql{dialect: d}
 	return s.Add(strs...)
 }
 
@@ -21,8 +27,9 @@ func (s *Sql) Add(strs ...string) *Sql {
 }
 
 func (s *Sql) AddParam(p any) *Sql {
-	s.params = append(s.params, p)
-	s.strs = append(s.strs, fmt.Sprintf("$%d", len(s.params)))
+	str, param := s.dialect.ProcessParam(p, len(s.params)+1)
+	s.params = append(s.params, param)
+	s.strs = append(s.strs, str)
 	return s
 }
 

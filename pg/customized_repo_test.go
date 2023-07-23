@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lib/pq"
 	"github.com/meowmeowcode/hohin"
+	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
 	"testing"
 )
@@ -19,8 +20,8 @@ func (c *Contact) Equal(c2 *Contact) bool {
 	return reflect.DeepEqual(c, c2)
 }
 
-func makeContactsRepo() *Repo[Contact] {
-	return NewRepo(Conf[Contact]{
+func makeContactsRepo() *sqldb.Repo[Contact] {
+	return NewRepo(sqldb.Conf[Contact]{
 		Table: "contacts",
 		Mapping: map[string]string{
 			"Id":   "id",
@@ -32,13 +33,13 @@ FROM contacts
 LEFT JOIN emails ON emails.contact_id = contacts.id
 GROUP BY contacts.id, contacts.name
         `,
-		Load: func(row Scanner) (Contact, error) {
+		Load: func(row sqldb.Scanner) (Contact, error) {
 			var entity Contact
 			err := row.Scan(&entity.Id, &entity.Name, (*pq.StringArray)(&entity.Emails))
 			return entity, err
 		},
-		AfterAdd: func(c Contact) []*Sql {
-			qs := make([]*Sql, 0)
+		AfterAdd: func(c Contact) []*sqldb.Sql {
+			qs := make([]*sqldb.Sql, 0)
 			for _, e := range c.Emails {
 				q := NewSql("INSERT INTO emails (id, email, contact_id) VALUES (").
 					AddParamsSep(", ", uuid.New(), e, c.Id).
@@ -47,8 +48,8 @@ GROUP BY contacts.id, contacts.name
 			}
 			return qs
 		},
-		AfterUpdate: func(c Contact) []*Sql {
-			qs := []*Sql{NewSql("DELETE FROM emails WHERE contact_id = ").AddParam(c.Id)}
+		AfterUpdate: func(c Contact) []*sqldb.Sql {
+			qs := []*sqldb.Sql{NewSql("DELETE FROM emails WHERE contact_id = ").AddParam(c.Id)}
 
 			for _, e := range c.Emails {
 				q := NewSql("INSERT INTO emails (id, email, contact_id) VALUES (").
@@ -86,7 +87,7 @@ CREATE TABLE IF NOT EXISTS emails (
 	if err != nil {
 		panic(err)
 	}
-	return NewDb(pool)
+	return sqldb.NewDb(pool)
 }
 
 func TestOneToMany(t *testing.T) {
