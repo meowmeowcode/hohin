@@ -1,4 +1,4 @@
-package sqldb
+package mysql
 
 import (
 	"database/sql"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/operations"
+	"github.com/meowmeowcode/hohin/sqldb"
+	"math"
 	"reflect"
 	"strings"
 )
@@ -53,9 +55,8 @@ type Repo[T any] struct {
 	queryCustomized bool
 	dump            func(T) (map[string]any, error)
 	load            func(Scanner) (T, error)
-	afterAdd        func(T) []*Sql
-	afterUpdate     func(T) []*Sql
-	dialect         Dialect
+	afterAdd        func(T) []*sqldb.Sql
+	afterUpdate     func(T) []*sqldb.Sql
 }
 
 type Conf[T any] struct {
@@ -64,16 +65,16 @@ type Conf[T any] struct {
 	Query       string
 	Dump        func(T) (map[string]any, error)
 	Load        func(Scanner) (T, error)
-	AfterAdd    func(T) []*Sql
-	AfterUpdate func(T) []*Sql
+	AfterAdd    func(T) []*sqldb.Sql
+	AfterUpdate func(T) []*sqldb.Sql
 }
 
-func NewRepo[T any](dialect Dialect, conf Conf[T]) *Repo[T] {
+func NewRepo[T any](conf Conf[T]) *Repo[T] {
 	if conf.Table == "" {
 		panic("table name is required to create a repository")
 	}
 
-	r := &Repo[T]{dialect: dialect, table: conf.Table}
+	r := &Repo[T]{table: conf.Table}
 
 	if conf.Mapping != nil {
 		r.fields = make([]string, 0, len(conf.Mapping))
@@ -98,12 +99,12 @@ func NewRepo[T any](dialect Dialect, conf Conf[T]) *Repo[T] {
 		query := strings.ToUpper(conf.Query)
 		for _, s := range []string{"WHERE", "ORDER", "OFFSET", "LIMIT", "GROUP", "HAVING"} {
 			if strings.Contains(query, s) {
-				r.query = r.newSql("SELECT * FROM (", r.query, ") AS filterable_query").String()
+				r.query = NewSql("SELECT * FROM (", r.query, ") AS filterable_query").String()
 				break
 			}
 		}
 	} else {
-		r.query = r.newSql("SELECT ").AddSep(", ", r.columns...).Add(" FROM ", r.table).String()
+		r.query = NewSql("SELECT ").AddSep(", ", r.columns...).Add(" FROM ", r.table).String()
 	}
 
 	if conf.Dump != nil {
@@ -141,17 +142,13 @@ func NewRepo[T any](dialect Dialect, conf Conf[T]) *Repo[T] {
 	return r
 }
 
-func (r *Repo[T]) newSql(strs ...string) *Sql {
-	return NewSql(r.dialect, strs...)
-}
-
 func (r *Repo[T]) Get(d hohin.Db, f hohin.Filter) (T, error) {
 	var zero T
 	if r.load == nil {
 		return zero, errors.New("repository isn't configured to load entities")
 	}
 	db := d.(*Db)
-	sqlBuilder := r.newSql(r.query, " WHERE ")
+	sqlBuilder := NewSql(r.query, " WHERE ")
 	if err := applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
 	}
@@ -162,12 +159,12 @@ func (r *Repo[T]) Get(d hohin.Db, f hohin.Filter) (T, error) {
 		return zero, hohin.NotFound
 	}
 	if err != nil {
-		return zero, fmt.Errorf("%w while executing query `%s`", err, query)
+		return zero, fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
 	return entity, nil
 }
 
-func applyFilter(s *Sql, f hohin.Filter) error {
+func applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 	switch f.Operation {
 	case operations.Not:
 		s.Add("NOT (")
@@ -186,17 +183,51 @@ func applyFilter(s *Sql, f hohin.Filter) error {
 		}
 		s.Pop()
 	case operations.Eq:
-		s.Add(f.Field, " = ").AddParam(f.Value)
+		if val, ok := f.Value.(float64); ok {
+			s.Add(f.Field, " LIKE ").AddParam(val)
+		} else {
+			s.Add(f.Field, " = ").AddParam(f.Value)
+		}
 	case operations.Ne:
-		s.Add(f.Field, " != ").AddParam(f.Value)
+		if val, ok := f.Value.(float64); ok {
+			s.Add(f.Field, " NOT LIKE ").AddParam(val)
+		} else {
+			s.Add(f.Field, " != ").AddParam(f.Value)
+		}
 	case operations.Lt:
-		s.Add(f.Field, " < ").AddParam(f.Value)
+		if val, ok := f.Value.(float64); ok {
+			s.Add(f.Field, " - ").AddParam(val).Add(" < -0.0001")
+		} else {
+			s.Add(f.Field, " < ").AddParam(f.Value)
+		}
 	case operations.Gt:
-		s.Add(f.Field, " > ").AddParam(f.Value)
+		if val, ok := f.Value.(float64); ok {
+			s.Add(f.Field, " - ").AddParam(val).Add(" > 0.0001")
+		} else {
+			s.Add(f.Field, " > ").AddParam(f.Value)
+		}
 	case operations.Lte:
-		s.Add(f.Field, " <= ").AddParam(f.Value)
+		if val, ok := f.Value.(float64); ok {
+			s.Add("(", f.Field, " LIKE ").
+				AddParam(val).
+				Add(" OR ").
+				Add(f.Field, " - ").
+				AddParam(val).
+				Add(" < -0.0001)")
+		} else {
+			s.Add(f.Field, " <= ").AddParam(f.Value)
+		}
 	case operations.Gte:
-		s.Add(f.Field, " >= ").AddParam(f.Value)
+		if val, ok := f.Value.(float64); ok {
+			s.Add("(", f.Field, " LIKE ").
+				AddParam(val).
+				Add(" OR ").
+				Add(f.Field, " - ").
+				AddParam(val).
+				Add(" > 0.0001)")
+		} else {
+			s.Add(f.Field, " >= ").AddParam(f.Value)
+		}
 	case operations.In:
 		switch val := f.Value.(type) {
 		case []int:
@@ -208,10 +239,9 @@ func applyFilter(s *Sql, f hohin.Filter) error {
 			s.Pop()
 			s.Add(")")
 		case []float64:
-			s.Add(f.Field, " IN (")
+			s.Add("(")
 			for _, i := range val {
-				s.AddParam(i)
-				s.Add(", ")
+				s.Add(f.Field, " LIKE ").AddParam(i).Add(" OR ")
 			}
 			s.Pop()
 			s.Add(")")
@@ -227,11 +257,11 @@ func applyFilter(s *Sql, f hohin.Filter) error {
 			return fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
 	case operations.Contains:
-		s.Add(f.Field, " like '%' || ").AddParam(f.Value).Add(" || '%' ")
+		s.Add(f.Field, " LIKE concat('%' ,").AddParam(f.Value).Add(", '%')")
 	case operations.HasPrefix:
-		s.Add(f.Field, " like ").AddParam(f.Value).Add(" || '%' ")
+		s.Add(f.Field, " LIKE concat(").AddParam(f.Value).Add(", '%')")
 	case operations.HasSuffix:
-		s.Add(f.Field, " like '%' || ").AddParam(f.Value)
+		s.Add(f.Field, " LIKE concat('%', ").AddParam(f.Value).Add(")")
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
 	}
@@ -244,11 +274,11 @@ func (r *Repo[T]) GetForUpdate(d hohin.Db, f hohin.Filter) (T, error) {
 		return zero, errors.New("repository isn't configured to load entities")
 	}
 	db := d.(*Db)
-	sqlBuilder := r.newSql(r.query, " WHERE ")
+	sqlBuilder := NewSql(r.query, " WHERE ")
 	if err := applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
 	}
-	sqlBuilder.Add(" ", r.dialect.ForUpdate())
+	sqlBuilder.Add(" FOR UPDATE")
 	query, params := sqlBuilder.Build()
 	row := db.executor.QueryRow(query, params...)
 	entity, err := r.load(row)
@@ -264,7 +294,7 @@ func (r *Repo[T]) GetForUpdate(d hohin.Db, f hohin.Filter) (T, error) {
 func (r *Repo[T]) Exists(d hohin.Db, f hohin.Filter) (bool, error) {
 	var result bool
 	db := d.(*Db)
-	sql := r.newSql("SELECT EXISTS (", r.query, " WHERE ")
+	sql := NewSql("SELECT EXISTS (", r.query, " WHERE ")
 	applyFilter(sql, f)
 	sql.Add(")")
 	query, params := sql.Build()
@@ -278,7 +308,7 @@ func (r *Repo[T]) Exists(d hohin.Db, f hohin.Filter) (bool, error) {
 
 func (r *Repo[T]) Delete(d hohin.Db, f hohin.Filter) error {
 	db := d.(*Db)
-	sql := r.newSql("DELETE FROM ", r.table, " WHERE ")
+	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
 	applyFilter(sql, f)
 	query, params := sql.Build()
 	_, err := db.executor.Exec(query, params...)
@@ -300,7 +330,7 @@ func (r *Repo[T]) Add(d hohin.Db, entity T) error {
 		columns = append(columns, k)
 		values = append(values, v)
 	}
-	query, params := r.newSql("INSERT INTO ", r.table, " (").
+	query, params := NewSql("INSERT INTO ", r.table, " (").
 		AddSep(", ", columns...).
 		Add(") VALUES (").
 		AddParamsSep(", ", values...).
@@ -327,7 +357,7 @@ func (r *Repo[T]) Update(d hohin.Db, f hohin.Filter, entity T) error {
 	if err != nil {
 		return err
 	}
-	sql := r.newSql("UPDATE ", r.table, " SET ")
+	sql := NewSql("UPDATE ", r.table, " SET ")
 	for k, v := range data {
 		sql.Add(k, " = ").AddParam(v).Add(", ")
 	}
@@ -351,7 +381,7 @@ func (r *Repo[T]) Update(d hohin.Db, f hohin.Filter, entity T) error {
 func (r Repo[T]) Count(d hohin.Db, f hohin.Filter) (int, error) {
 	var result int
 	db := d.(*Db)
-	sql := r.newSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
+	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
 	applyFilter(sql, f)
 	sql.Add(") AS q")
 	query, params := sql.Build()
@@ -366,7 +396,7 @@ func (r Repo[T]) Count(d hohin.Db, f hohin.Filter) (int, error) {
 func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 	db := d.(*Db)
 	result := make([]T, 0)
-	sql := r.newSql(r.query)
+	sql := NewSql(r.query)
 	if q.Filter.Operation != "" {
 		sql.Add(" WHERE ")
 		if err := applyFilter(sql, q.Filter); err != nil {
@@ -384,7 +414,13 @@ func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 		}
 		sql.Pop()
 	}
-	sql.Add(r.dialect.LimitAndOffset(q.Limit, q.Offset))
+	if q.Limit > 0 && q.Offset > 0 {
+		sql.Add(" LIMIT ").AddParamsSep(", ", q.Offset, q.Limit)
+	} else if q.Offset > 0 {
+		sql.Add(" LIMIT ").AddParamsSep(", ", q.Offset, math.MaxInt64)
+	} else if q.Limit > 0 {
+		sql.Add(" LIMIT ").AddParam(q.Limit)
+	}
 	query, params := sql.Build()
 	rows, err := db.executor.Query(query, params...)
 	if err != nil {
@@ -405,7 +441,7 @@ func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 func (r *Repo[T]) CountAll(d hohin.Db) (int, error) {
 	var result int
 	db := d.(*Db)
-	query := r.newSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
+	query := NewSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
 	row := db.executor.QueryRow(query)
 	err := row.Scan(&result)
 	if err != nil {
@@ -416,7 +452,7 @@ func (r *Repo[T]) CountAll(d hohin.Db) (int, error) {
 
 func (r *Repo[T]) Clear(d hohin.Db) error {
 	db := d.(*Db)
-	query := r.newSql("DELETE FROM ", r.table).String()
+	query := NewSql("DELETE FROM ", r.table).String()
 	_, err := db.executor.Exec(query)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)

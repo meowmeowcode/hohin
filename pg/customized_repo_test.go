@@ -20,8 +20,8 @@ func (c *Contact) Equal(c2 *Contact) bool {
 	return reflect.DeepEqual(c, c2)
 }
 
-func makeContactsRepo() *sqldb.Repo[Contact] {
-	return NewRepo(sqldb.Conf[Contact]{
+func makeContactsRepo() hohin.Repo[Contact] {
+	return NewRepo(Conf[Contact]{
 		Table: "contacts",
 		Mapping: map[string]string{
 			"Id":   "id",
@@ -33,7 +33,7 @@ FROM contacts
 LEFT JOIN emails ON emails.contact_id = contacts.id
 GROUP BY contacts.id, contacts.name
         `,
-		Load: func(row sqldb.Scanner) (Contact, error) {
+		Load: func(row Scanner) (Contact, error) {
 			var entity Contact
 			err := row.Scan(&entity.Id, &entity.Name, (*pq.StringArray)(&entity.Emails))
 			return entity, err
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS emails (
 	if err != nil {
 		panic(err)
 	}
-	return sqldb.NewDb(pool)
+	return NewDb(pool)
 }
 
 func TestOneToMany(t *testing.T) {

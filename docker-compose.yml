@@ -8,3 +8,12 @@ services:
       POSTGRES_USER: hohin
       POSTGRES_PASSWORD: hohin
       POSTGRES_DB: hohin
+  mysql:
+    image: "mysql:8.0"
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: hohin
+      MYSQL_USER: hohin
+      MYSQL_PASSWORD: hohin
+      MYSQL_DATABASE: hohin

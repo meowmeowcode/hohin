@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/meowmeowcode/hohin"
-	"github.com/meowmeowcode/hohin/sqldb"
 	"github.com/shopspring/decimal"
 	"testing"
 	"time"
@@ -69,13 +68,13 @@ CREATE TABLE IF NOT EXISTS users (
 	if err != nil {
 		panic(err)
 	}
-	return sqldb.NewDb(pool)
+	return NewDb(pool)
 }
 
 func makeRepo() hohin.Repo[User] {
-	return NewRepo(sqldb.Conf[User]{
+	return NewRepo(Conf[User]{
 		Table: "users",
-		Load: func(row sqldb.Scanner) (User, error) {
+		Load: func(row Scanner) (User, error) {
 			var u User
 			var registeredAt string
 			err := row.Scan(&u.Id, &u.Name, &u.Age, &u.Active, &u.Weight, &u.Money, &registeredAt)

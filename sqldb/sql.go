@@ -6,8 +6,6 @@ import (
 
 type Dialect interface {
 	ProcessParam(p any, number int) (string, any)
-	LimitAndOffset(l int, o int) string
-	ForUpdate() string
 }
 
 type Sql struct {

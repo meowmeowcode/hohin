@@ -1,10 +1,10 @@
-package pg
+package mysql
 
 import (
 	"database/sql"
 	"errors"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 	"github.com/meowmeowcode/hohin"
 	"github.com/shopspring/decimal"
 	"testing"
@@ -46,19 +46,19 @@ func usersEqual(u, u2 []User) bool {
 }
 
 func makeDb() hohin.Db {
-	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
+	pool, err := sql.Open("mysql", "hohin:hohin@/hohin?parseTime=true")
 	if err != nil {
 		panic(err)
 	}
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS users (
-    Id uuid PRIMARY KEY,
-    Name text NOT NULL,
+    Id char(36) PRIMARY KEY,
+    Name varchar(100) NOT NULL,
     Age bigint NOT NULL,
-    Active boolean NOT NULL,
-    Weight float8 NOT NULL,
-    Money decimal NOT NULL,
-    RegisteredAt timestamptz NOT NULL
+    Active bool NOT NULL,
+    Weight double NOT NULL,
+    Money decimal(12, 2) NOT NULL,
+    RegisteredAt datetime(6) NOT NULL
 )
        `)
 	if err != nil {
@@ -137,7 +137,7 @@ func addEve(db hohin.Db, repo hohin.Repo[User]) User {
 func TestAdd(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := User{Name: "Alice"}
+	alice := User{Name: "Alice", RegisteredAt: time.Now().UTC()}
 	if err := repo.Add(db, alice); err != nil {
 		t.Fatal(err)
 	}
@@ -298,7 +298,7 @@ func TestLimit(t *testing.T) {
 	alice := addAlice(db, repo)
 	bob := addBob(db, repo)
 	addEve(db, repo)
-	users, err := repo.GetMany(db, hohin.Query{Limit: 2})
+	users, err := repo.GetMany(db, hohin.Query{Limit: 2}.OrderBy(hohin.Asc("Name")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,7 +314,7 @@ func TestOffset(t *testing.T) {
 	addAlice(db, repo)
 	bob := addBob(db, repo)
 	eve := addEve(db, repo)
-	users, err := repo.GetMany(db, hohin.Query{Offset: 1})
+	users, err := repo.GetMany(db, hohin.Query{Offset: 1}.OrderBy(hohin.Asc("Name")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -526,7 +526,7 @@ func TestFilters(t *testing.T) {
 		},
 	}
 	for _, cs := range cases {
-		result, err := repo.GetMany(db, hohin.Query{Filter: cs.filter})
+		result, err := repo.GetMany(db, hohin.Query{Filter: cs.filter}.OrderBy(hohin.Asc("Name")))
 		if err != nil {
 			t.Fatal(err)
 		}
