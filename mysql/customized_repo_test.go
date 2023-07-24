@@ -1,9 +1,9 @@
-package pg
+package mysql
 
 import (
 	"database/sql"
+	"encoding/json"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
@@ -28,14 +28,19 @@ func makeContactsRepo() hohin.Repo[Contact] {
 			"Name": "name",
 		},
 		Query: `
-SELECT * FROM (SELECT contacts.id, contacts.name, array_agg(emails.email) AS emails
+SELECT * FROM (SELECT contacts.id, contacts.name, json_arrayagg(emails.email) AS emails
 FROM contacts
 LEFT JOIN emails ON emails.contact_id = contacts.id
 GROUP BY contacts.id, contacts.name) AS query
         `,
 		Load: func(row Scanner) (Contact, error) {
 			var entity Contact
-			err := row.Scan(&entity.Pk, &entity.Name, (*pq.StringArray)(&entity.Emails))
+			var emailsData string
+			err := row.Scan(&entity.Pk, &entity.Name, &emailsData)
+			if err != nil {
+				return entity, err
+			}
+			err = json.Unmarshal([]byte(emailsData), &entity.Emails)
 			return entity, err
 		},
 		AfterAdd: func(c Contact) []*sqldb.Sql {
@@ -63,14 +68,14 @@ GROUP BY contacts.id, contacts.name) AS query
 }
 
 func makeContactsDb() hohin.Db {
-	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
+	pool, err := sql.Open("mysql", "hohin:hohin@/hohin?parseTime=true")
 	if err != nil {
 		panic(err)
 	}
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS contacts (
-    id uuid PRIMARY KEY,
-    name text NOT NULL
+    Id char(36) PRIMARY KEY,
+    name varchar(36) NOT NULL
 )
     `)
 	if err != nil {
@@ -78,9 +83,9 @@ CREATE TABLE IF NOT EXISTS contacts (
 	}
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS emails (
-    id uuid PRIMARY KEY,
-    email text NOT NULL UNIQUE,
-    contact_id uuid REFERENCES contacts(id) ON DELETE CASCADE
+    Id char(36) PRIMARY KEY,
+    email varchar(100) NOT NULL UNIQUE,
+    contact_id char(36) REFERENCES contacts(id) ON DELETE CASCADE
 )
     `)
 	_, err = pool.Exec(`DELETE FROM contacts`)

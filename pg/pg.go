@@ -8,7 +8,6 @@ import (
 	"github.com/meowmeowcode/hohin/operations"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
-	"strings"
 )
 
 type Executor interface {
@@ -80,7 +79,7 @@ func NewRepo[T any](conf Conf[T]) *Repo[T] {
 		r.columns = make([]string, 0, len(conf.Mapping))
 		for field, column := range conf.Mapping {
 			r.fields = append(r.fields, field)
-			r.columns = append(r.fields, column)
+			r.columns = append(r.columns, column)
 		}
 	} else {
 		var entity T
@@ -95,13 +94,6 @@ func NewRepo[T any](conf Conf[T]) *Repo[T] {
 
 	if conf.Query != "" {
 		r.query = conf.Query
-		query := strings.ToUpper(conf.Query)
-		for _, s := range []string{"WHERE", "ORDER", "OFFSET", "LIMIT", "GROUP", "HAVING"} {
-			if strings.Contains(query, s) {
-				r.query = NewSql("SELECT * FROM (", r.query, ") AS filterable_query").String()
-				break
-			}
-		}
 	} else {
 		r.query = NewSql("SELECT ").AddSep(", ", r.columns...).Add(" FROM ", r.table).String()
 	}
