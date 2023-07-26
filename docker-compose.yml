@@ -17,3 +17,14 @@ services:
       MYSQL_USER: hohin
       MYSQL_PASSWORD: hohin
       MYSQL_DATABASE: hohin
+  clickhouse:
+    image: "clickhouse/clickhouse-server:23.3.8.21-alpine"
+    ports:
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: hohin
+      CLICKHOUSE_USER: hohin
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_PASSWORD: hohin
+    volumes:
+      - ${PWD}/clickhouse.xml:/etc/clickhouse-server/users.xml
