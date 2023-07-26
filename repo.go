@@ -8,6 +8,7 @@ type Repo[T any] interface {
 	Get(Db, Filter) (T, error)
 	GetForUpdate(Db, Filter) (T, error)
 	GetMany(Db, Query) ([]T, error)
+	GetFirst(Db, Query) (T, error)
 	Add(Db, T) error
 	Update(Db, Filter, T) error
 	Delete(Db, Filter) error

@@ -512,6 +512,25 @@ func TestFilters(t *testing.T) {
 	}
 }
 
+func TestGetFirst(t *testing.T) {
+	db := makeDb()
+	repo := makeRepo()
+	addAlice(db, repo)
+	addBob(db, repo)
+	eve := addEve(db, repo)
+	u, err := repo.GetFirst(db, hohin.Query{}.OrderBy(hohin.Desc("Name")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !u.Equal(&eve) {
+		t.Fatalf("%v != %v", eve, u)
+	}
+	_, err = repo.GetFirst(db, hohin.Query{Filter: hohin.Eq("Name", "Robert")}.OrderBy(hohin.Desc("Name")))
+	if err != hohin.NotFound {
+		t.Fatalf("%v != %v", err, hohin.NotFound)
+	}
+}
+
 func TestCountAll(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()

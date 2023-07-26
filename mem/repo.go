@@ -190,12 +190,13 @@ func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 		})
 	}
 
-	if q.Offset > 0 {
-		result = result[q.Offset:]
-	}
-
-	if q.Limit > 0 {
-		result = result[:q.Limit]
+	if len(result) > 0 {
+		if q.Offset > 0 {
+			result = result[q.Offset:]
+		}
+		if q.Limit > 0 {
+			result = result[:q.Limit]
+		}
 	}
 
 	return result, nil
@@ -379,6 +380,19 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 	}
 
 	panic(fmt.Sprintf("unknown operation %s", f.Operation))
+}
+
+func (r *Repo[T]) GetFirst(d hohin.Db, q hohin.Query) (T, error) {
+	q.Limit = 1
+	var zero T
+	result, err := r.GetMany(d, q)
+	if err != nil {
+		return zero, err
+	}
+	if len(result) == 0 {
+		return zero, hohin.NotFound
+	}
+	return result[0], nil
 }
 
 func (r *Repo[T]) Add(d hohin.Db, entity T) error {

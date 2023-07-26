@@ -373,6 +373,19 @@ func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
 	return result, nil
 }
 
+func (r *Repo[T]) GetFirst(d hohin.Db, q hohin.Query) (T, error) {
+	q.Limit = 1
+	var zero T
+	result, err := r.GetMany(d, q)
+	if err != nil {
+		return zero, err
+	}
+	if len(result) == 0 {
+		return zero, hohin.NotFound
+	}
+	return result[0], nil
+}
+
 func (r *Repo[T]) CountAll(d hohin.Db) (int, error) {
 	var result int
 	db := d.(*Db)
