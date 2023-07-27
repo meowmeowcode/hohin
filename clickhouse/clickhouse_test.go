@@ -44,7 +44,7 @@ func usersEqual(u, u2 []User) bool {
 	return true
 }
 
-func makeDb() hohin.Db {
+func makeDb() hohin.SimpleDb {
 	pool, err := sql.Open("clickhouse", "clickhouse://hohin:hohin@localhost:9000/hohin")
 	if err != nil {
 		panic(err)
@@ -67,14 +67,14 @@ CREATE TABLE IF NOT EXISTS users (
 	if err != nil {
 		panic(err)
 	}
-	return NewDb(pool)
+	return NewDb(pool).Simple()
 }
 
-func makeRepo() hohin.Repo[User] {
-	return NewRepo(Conf[User]{Table: "users"})
+func makeRepo() hohin.SimpleRepo[User] {
+	return NewRepo(Conf[User]{Table: "users"}).Simple()
 }
 
-func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
+func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("120.50")
 	if err != nil {
 		panic(err)
@@ -94,7 +94,7 @@ func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
 	return u
 }
 
-func addBob(db hohin.Db, repo hohin.Repo[User]) User {
+func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("136.02")
 	if err != nil {
 		panic(err)
@@ -114,7 +114,7 @@ func addBob(db hohin.Db, repo hohin.Repo[User]) User {
 	return u
 }
 
-func addEve(db hohin.Db, repo hohin.Repo[User]) User {
+func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("168.31")
 	if err != nil {
 		panic(err)

@@ -45,7 +45,7 @@ func usersEqual(u, u2 []User) bool {
 	return true
 }
 
-func makeDb() hohin.Db {
+func makeDb() hohin.SimpleDb {
 	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
 	if err != nil {
 		panic(err)
@@ -68,14 +68,14 @@ CREATE TABLE IF NOT EXISTS users (
 	if err != nil {
 		panic(err)
 	}
-	return NewDb(pool)
+	return NewDb(pool).Simple()
 }
 
-func makeRepo() hohin.Repo[User] {
-	return NewRepo(Conf[User]{Table: "users"})
+func makeRepo() hohin.SimpleRepo[User] {
+	return NewRepo(Conf[User]{Table: "users"}).Simple()
 }
 
-func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
+func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("120.50")
 	if err != nil {
 		panic(err)
@@ -95,7 +95,7 @@ func addAlice(db hohin.Db, repo hohin.Repo[User]) User {
 	return u
 }
 
-func addBob(db hohin.Db, repo hohin.Repo[User]) User {
+func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("136.02")
 	if err != nil {
 		panic(err)
@@ -115,7 +115,7 @@ func addBob(db hohin.Db, repo hohin.Repo[User]) User {
 	return u
 }
 
-func addEve(db hohin.Db, repo hohin.Repo[User]) User {
+func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("168.31")
 	if err != nil {
 		panic(err)
@@ -594,7 +594,7 @@ func TestTransaction(t *testing.T) {
 	addAlice(db, repo)
 	bob := addBob(db, repo)
 	addEve(db, repo)
-	err := db.Transaction(func(db hohin.Db) error {
+	err := db.Transaction(func(db hohin.SimpleDb) error {
 		repo.Delete(db, hohin.Eq("Id", bob.Id))
 		return errors.New("fail")
 	})
@@ -608,7 +608,7 @@ func TestTransaction(t *testing.T) {
 	if !exists {
 		t.Fatal("Transaction wasn't rolled back")
 	}
-	err = db.Transaction(func(db hohin.Db) error {
+	err = db.Transaction(func(db hohin.SimpleDb) error {
 		repo.Delete(db, hohin.Eq("Id", bob.Id))
 		return nil
 	})

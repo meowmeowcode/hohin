@@ -1,23 +1,28 @@
 package hohin
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 var NotFound error = errors.New("object not found")
 
 type Repo[T any] interface {
-	Get(Db, Filter) (T, error)
-	GetForUpdate(Db, Filter) (T, error)
-	GetMany(Db, Query) ([]T, error)
-	GetFirst(Db, Query) (T, error)
-	Add(Db, T) error
-	Update(Db, Filter, T) error
-	Delete(Db, Filter) error
-	Exists(Db, Filter) (bool, error)
-	Count(Db, Filter) (int, error)
-	CountAll(Db) (int, error)
-	Clear(Db) error
+	Get(context.Context, Db, Filter) (T, error)
+	GetForUpdate(context.Context, Db, Filter) (T, error)
+	GetMany(context.Context, Db, Query) ([]T, error)
+	GetFirst(context.Context, Db, Query) (T, error)
+	Add(context.Context, Db, T) error
+	Update(context.Context, Db, Filter, T) error
+	Delete(context.Context, Db, Filter) error
+	Exists(context.Context, Db, Filter) (bool, error)
+	Count(context.Context, Db, Filter) (int, error)
+	CountAll(context.Context, Db) (int, error)
+	Clear(context.Context, Db) error
+	Simple() SimpleRepo[T]
 }
 
 type Db interface {
-	Transaction(func(Db) error) error
+	Transaction(context.Context, func(context.Context, Db) error) error
+	Simple() SimpleDb
 }

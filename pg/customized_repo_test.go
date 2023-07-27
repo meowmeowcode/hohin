@@ -20,7 +20,7 @@ func (c *Contact) Equal(c2 *Contact) bool {
 	return reflect.DeepEqual(c, c2)
 }
 
-func makeContactsRepo() hohin.Repo[Contact] {
+func makeContactsRepo() hohin.SimpleRepo[Contact] {
 	return NewRepo(Conf[Contact]{
 		Table: "contacts",
 		Mapping: map[string]string{
@@ -59,10 +59,10 @@ GROUP BY contacts.id, contacts.name) AS query
 			}
 			return qs
 		},
-	})
+	}).Simple()
 }
 
-func makeContactsDb() hohin.Db {
+func makeContactsDb() hohin.SimpleDb {
 	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
 	if err != nil {
 		panic(err)
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS emails (
 	if err != nil {
 		panic(err)
 	}
-	return NewDb(pool)
+	return NewDb(pool).Simple()
 }
 
 func TestOneToMany(t *testing.T) {

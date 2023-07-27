@@ -1,6 +1,7 @@
 package mem
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
@@ -17,14 +18,18 @@ type Db struct {
 	data map[string][][]byte
 }
 
-func (db *Db) Transaction(f func(hohin.Db) error) error {
+func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db) error) error {
 	t := db.copy()
-	err := f(t)
+	err := f(ctx, t)
 	if err != nil {
 		return err
 	}
 	db.data = t.data
 	return nil
+}
+
+func (db *Db) Simple() hohin.SimpleDb {
+	return hohin.NewSimpleDb(db)
 }
 
 func (db *Db) copy() *Db {
@@ -50,7 +55,11 @@ func NewRepo[T any](collection string) *Repo[T] {
 	return &Repo[T]{collection: collection}
 }
 
-func (r *Repo[T]) Get(d hohin.Db, f hohin.Filter) (T, error) {
+func (r *Repo[T]) Simple() hohin.SimpleRepo[T] {
+	return hohin.NewSimpleRepo[T](r)
+}
+
+func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
 	var zero T
 	db := d.(*Db)
 	for _, record := range db.data[r.collection] {
@@ -69,11 +78,11 @@ func (r *Repo[T]) Get(d hohin.Db, f hohin.Filter) (T, error) {
 	return zero, hohin.NotFound
 }
 
-func (r *Repo[T]) GetForUpdate(d hohin.Db, f hohin.Filter) (T, error) {
-	return r.Get(d, f)
+func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
+	return r.Get(ctx, d, f)
 }
 
-func (r *Repo[T]) Exists(d hohin.Db, f hohin.Filter) (bool, error) {
+func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool, error) {
 	db := d.(*Db)
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
@@ -91,7 +100,7 @@ func (r *Repo[T]) Exists(d hohin.Db, f hohin.Filter) (bool, error) {
 	return false, nil
 }
 
-func (r *Repo[T]) Delete(d hohin.Db, f hohin.Filter) error {
+func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error {
 	db := d.(*Db)
 	indices := make([]int, 0)
 	for i, record := range db.data[r.collection] {
@@ -118,7 +127,7 @@ func (r *Repo[T]) Delete(d hohin.Db, f hohin.Filter) error {
 	return nil
 }
 
-func (r Repo[T]) Count(d hohin.Db, f hohin.Filter) (int, error) {
+func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, error) {
 	db := d.(*Db)
 	result := 0
 	for _, record := range db.data[r.collection] {
@@ -137,7 +146,7 @@ func (r Repo[T]) Count(d hohin.Db, f hohin.Filter) (int, error) {
 	return result, nil
 }
 
-func (r *Repo[T]) GetMany(d hohin.Db, q hohin.Query) ([]T, error) {
+func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, error) {
 	db := d.(*Db)
 	result := []T{}
 	for _, record := range db.data[r.collection] {
@@ -382,10 +391,10 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 	panic(fmt.Sprintf("unknown operation %s", f.Operation))
 }
 
-func (r *Repo[T]) GetFirst(d hohin.Db, q hohin.Query) (T, error) {
+func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, error) {
 	q.Limit = 1
 	var zero T
-	result, err := r.GetMany(d, q)
+	result, err := r.GetMany(ctx, d, q)
 	if err != nil {
 		return zero, err
 	}
@@ -395,7 +404,7 @@ func (r *Repo[T]) GetFirst(d hohin.Db, q hohin.Query) (T, error) {
 	return result[0], nil
 }
 
-func (r *Repo[T]) Add(d hohin.Db, entity T) error {
+func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 	db := d.(*Db)
 	records := db.data[r.collection]
 	record, err := r.dump(entity)
@@ -406,7 +415,7 @@ func (r *Repo[T]) Add(d hohin.Db, entity T) error {
 	return nil
 }
 
-func (r *Repo[T]) Update(d hohin.Db, f hohin.Filter, entity T) error {
+func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity T) error {
 	db := d.(*Db)
 	index := -1
 	for i, record := range db.data[r.collection] {
@@ -435,12 +444,12 @@ func (r *Repo[T]) Update(d hohin.Db, f hohin.Filter, entity T) error {
 	return nil
 }
 
-func (r *Repo[T]) CountAll(d hohin.Db) (int, error) {
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
 	db := d.(*Db)
 	return len(db.data[r.collection]), nil
 }
 
-func (r *Repo[T]) Clear(d hohin.Db) error {
+func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {
 	db := d.(*Db)
 	db.data[r.collection] = nil
 	return nil

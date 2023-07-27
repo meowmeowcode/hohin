@@ -7,6 +7,7 @@ import (
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
+	"sort"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func (c *Contact) Equal(c2 *Contact) bool {
 	return reflect.DeepEqual(c, c2)
 }
 
-func makeContactsRepo() hohin.Repo[Contact] {
+func makeContactsRepo() hohin.SimpleRepo[Contact] {
 	return NewRepo(Conf[Contact]{
 		Table: "contacts",
 		Mapping: map[string]string{
@@ -41,6 +42,7 @@ GROUP BY contacts.id, contacts.name) AS query
 				return entity, err
 			}
 			err = json.Unmarshal([]byte(emailsData), &entity.Emails)
+			sort.Strings(entity.Emails)
 			return entity, err
 		},
 		AfterAdd: func(c Contact) []*sqldb.Sql {
@@ -64,10 +66,10 @@ GROUP BY contacts.id, contacts.name) AS query
 			}
 			return qs
 		},
-	})
+	}).Simple()
 }
 
-func makeContactsDb() hohin.Db {
+func makeContactsDb() hohin.SimpleDb {
 	pool, err := sql.Open("mysql", "hohin:hohin@/hohin?parseTime=true")
 	if err != nil {
 		panic(err)
@@ -96,13 +98,13 @@ CREATE TABLE IF NOT EXISTS emails (
 	if err != nil {
 		panic(err)
 	}
-	return NewDb(pool)
+	return NewDb(pool).Simple()
 }
 
 func TestOneToMany(t *testing.T) {
 	db := makeContactsDb()
 	repo := makeContactsRepo()
-	bob := Contact{Pk: uuid.New(), Name: "Bob", Emails: []string{"bob@test.com", "bob123@test.com"}}
+	bob := Contact{Pk: uuid.New(), Name: "Bob", Emails: []string{"bob123@test.com", "bob@test.com"}}
 	err := repo.Add(db, bob)
 	if err != nil {
 		t.Fatal(err)
