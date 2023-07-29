@@ -11,14 +11,18 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
 type Db struct {
-	data map[string][][]byte
+	data  map[string][][]byte
+	mutex sync.RWMutex
 }
 
 func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db) error) error {
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	t := db.copy()
 	err := f(ctx, t)
 	if err != nil {
@@ -62,6 +66,8 @@ func (r *Repo[T]) Simple() hohin.SimpleRepo[T] {
 func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
 	var zero T
 	db := d.(*Db)
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
@@ -84,6 +90,8 @@ func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.Db, f hohin.Filter) 
 
 func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool, error) {
 	db := d.(*Db)
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
@@ -102,6 +110,8 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 
 func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error {
 	db := d.(*Db)
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	indices := make([]int, 0)
 	for i, record := range db.data[r.collection] {
 		entity, err := r.load(record)
@@ -129,6 +139,8 @@ func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error 
 
 func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, error) {
 	db := d.(*Db)
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
 	result := 0
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
@@ -148,6 +160,8 @@ func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, er
 
 func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, error) {
 	db := d.(*Db)
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
 	result := []T{}
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
@@ -406,6 +420,8 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, e
 
 func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 	db := d.(*Db)
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	records := db.data[r.collection]
 	record, err := r.dump(entity)
 	if err != nil {
@@ -417,6 +433,8 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 
 func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity T) error {
 	db := d.(*Db)
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	index := -1
 	for i, record := range db.data[r.collection] {
 		entity, err := r.load(record)
@@ -446,11 +464,15 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 
 func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
 	db := d.(*Db)
+	db.mutex.RLock()
+	defer db.mutex.RUnlock()
 	return len(db.data[r.collection]), nil
 }
 
 func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {
 	db := d.(*Db)
+	db.mutex.Lock()
+	defer db.mutex.Unlock()
 	db.data[r.collection] = nil
 	return nil
 }
