@@ -32,6 +32,10 @@ func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db)
 	return nil
 }
 
+func (db *Db) Tx(ctx context.Context, _ hohin.IsolationLevel, f func(context.Context, hohin.Db) error) error {
+	return db.Transaction(ctx, f)
+}
+
 func (db *Db) Simple() hohin.SimpleDb {
 	return hohin.NewSimpleDb(db)
 }

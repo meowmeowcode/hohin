@@ -23,11 +23,26 @@ type Db struct {
 }
 
 func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db) error) error {
+	return db.Tx(ctx, hohin.DefaultIsolation, f)
+}
+
+func (db *Db) Tx(ctx context.Context, level hohin.IsolationLevel, f func(context.Context, hohin.Db) error) error {
 	executor, ok := db.executor.(*sql.DB)
 	if !ok {
 		panic("nested transactions are not supported")
 	}
-	tx, err := executor.BeginTx(ctx, &sql.TxOptions{})
+	txOptions := sql.TxOptions{}
+	switch level {
+	case hohin.ReadUncommitted:
+		txOptions.Isolation = sql.LevelReadUncommitted
+	case hohin.ReadCommitted:
+		txOptions.Isolation = sql.LevelReadCommitted
+	case hohin.RepeatableRead:
+		txOptions.Isolation = sql.LevelRepeatableRead
+	case hohin.Serializable:
+		txOptions.Isolation = sql.LevelSerializable
+	}
+	tx, err := executor.BeginTx(ctx, &txOptions)
 	if err != nil {
 		return err
 	}

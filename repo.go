@@ -24,5 +24,6 @@ type Repo[T any] interface {
 
 type Db interface {
 	Transaction(context.Context, func(context.Context, Db) error) error
+	Tx(context.Context, IsolationLevel, func(context.Context, Db) error) error
 	Simple() SimpleDb
 }

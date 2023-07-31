@@ -623,3 +623,39 @@ func TestTransaction(t *testing.T) {
 		t.Fatal("Transaction wasn't commited")
 	}
 }
+
+func TestTx(t *testing.T) {
+	db := makeDb()
+	repo := makeRepo()
+	addAlice(db, repo)
+	bob := addBob(db, repo)
+	addEve(db, repo)
+	err := db.Tx(hohin.RepeatableRead, func(db hohin.SimpleDb) error {
+		repo.Delete(db, hohin.Eq("Id", bob.Id))
+		return errors.New("fail")
+	})
+	if err == nil {
+		t.Fatal("Transaction didn't fail")
+	}
+	exists, err := repo.Exists(db, hohin.Eq("Id", bob.Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !exists {
+		t.Fatal("Transaction wasn't rolled back")
+	}
+	err = db.Tx(hohin.RepeatableRead, func(db hohin.SimpleDb) error {
+		repo.Delete(db, hohin.Eq("Id", bob.Id))
+		return nil
+	})
+	if err != nil {
+		t.Fatal("Transaction failed")
+	}
+	exists, err = repo.Exists(db, hohin.Eq("Id", bob.Id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exists {
+		t.Fatal("Transaction wasn't commited")
+	}
+}

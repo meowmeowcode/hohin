@@ -64,6 +64,12 @@ func (d *SimpleDb) Transaction(f func(db SimpleDb) error) error {
 	})
 }
 
+func (d *SimpleDb) Tx(l IsolationLevel, f func(db SimpleDb) error) error {
+	return d.db.Tx(context.Background(), l, func(_ context.Context, db Db) error {
+		return f(db.Simple())
+	})
+}
+
 func NewSimpleDb(db Db) SimpleDb {
 	return SimpleDb{db: db}
 }
