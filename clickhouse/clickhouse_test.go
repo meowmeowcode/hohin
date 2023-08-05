@@ -13,7 +13,7 @@ import (
 type User struct {
 	Id           uuid.UUID
 	Name         string
-	Age          int
+	Age          uint32
 	Active       bool
 	Weight       float64
 	Money        decimal.Decimal
@@ -53,11 +53,11 @@ func makeDb() hohin.SimpleDb {
 CREATE TABLE IF NOT EXISTS users (
     Id UUID NOT NULL,
     Name String NOT NULL,
-    Age UInt64 NOT NULL,
+    Age UInt32 NOT NULL,
     Active Boolean NOT NULL,
     Weight Float64 NOT NULL,
     Money Decimal(12, 2) NOT NULL,
-    RegisteredAt DateTime64(6, 'UTC') NOT NULL
+    RegisteredAt DateTime64 NOT NULL
 ) ENGINE = MergeTree() ORDER BY RegisteredAt
        `)
 	if err != nil {
@@ -136,7 +136,7 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 func TestAdd(t *testing.T) {
 	db := makeDb()
 	repo := makeRepo()
-	alice := User{Name: "Alice", RegisteredAt: time.Now().UTC()}
+	alice := User{Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)}
 	if err := repo.Add(db, alice); err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +146,25 @@ func TestAdd(t *testing.T) {
 	}
 	if !u.Equal(&alice) {
 		t.Fatalf("%v != %v", alice, u)
+	}
+}
+
+func TestAddMany(t *testing.T) {
+	db := makeDb()
+	repo := makeRepo()
+	users := []User{
+		User{Id: uuid.New(), Name: "Alice", RegisteredAt: time.Now().UTC()},
+		User{Id: uuid.New(), Name: "Bob", RegisteredAt: time.Now().UTC()},
+	}
+	if err := repo.AddMany(db, users); err != nil {
+		t.Fatal(err)
+	}
+	result, err := repo.GetMany(db, hohin.Query{}.OrderBy(hohin.Asc("Name")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !usersEqual(result, users) {
+		t.Fatalf("%v != %v", result, users)
 	}
 }
 
@@ -385,7 +404,7 @@ func TestFilters(t *testing.T) {
 			result: []User{bob, eve},
 		},
 		{
-			filter: hohin.In("Age", []int{alice.Age, eve.Age}),
+			filter: hohin.In("Age", []any{alice.Age, eve.Age}),
 			result: []User{alice, eve},
 		},
 		// float64 operations:
@@ -414,7 +433,7 @@ func TestFilters(t *testing.T) {
 			result: []User{bob, eve},
 		},
 		{
-			filter: hohin.In("Weight", []float64{alice.Weight, eve.Weight}),
+			filter: hohin.In("Weight", []any{alice.Weight, eve.Weight}),
 			result: []User{alice, eve},
 		},
 		// decimal operations:
@@ -461,7 +480,7 @@ func TestFilters(t *testing.T) {
 			result: []User{alice, eve},
 		},
 		{
-			filter: hohin.In("Name", []string{"Alice", "Bob"}),
+			filter: hohin.In("Name", []any{"Alice", "Bob"}),
 			result: []User{alice, bob},
 		},
 		{

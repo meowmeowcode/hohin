@@ -380,24 +380,33 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		}
 	case operations.In:
 		switch val := f.Value.(type) {
-		case []string:
-			for _, x := range val {
-				if x == field.String() {
-					return true, nil
-				}
-			}
-			return false, nil
-		case []int:
-			for _, x := range val {
-				if int64(x) == field.Int() {
-					return true, nil
-				}
-			}
-			return false, nil
-		case []float64:
-			for _, x := range val {
-				if x == field.Float() {
-					return true, nil
+		case []any:
+			for _, item := range val {
+				switch x := item.(type) {
+				case string:
+					if x == field.String() {
+						return true, nil
+					}
+				case int:
+					if int64(x) == field.Int() {
+						return true, nil
+					}
+				case int32:
+					if int64(x) == field.Int() {
+						return true, nil
+					}
+				case int64:
+					if int64(x) == field.Int() {
+						return true, nil
+					}
+				case float32:
+					if float64(x) == field.Float() {
+						return true, nil
+					}
+				case float64:
+					if x == field.Float() {
+						return true, nil
+					}
 				}
 			}
 			return false, nil
@@ -432,6 +441,15 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 		return err
 	}
 	db.data[r.collection] = append(records, record)
+	return nil
+}
+
+func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
+	for _, e := range entities {
+		if err := r.Add(ctx, d, e); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

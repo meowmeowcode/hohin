@@ -30,6 +30,10 @@ func (r *SimpleRepo[T]) Add(db SimpleDb, entity T) error {
 	return r.repo.Add(context.Background(), db.db, entity)
 }
 
+func (r *SimpleRepo[T]) AddMany(db SimpleDb, entities []T) error {
+	return r.repo.AddMany(context.Background(), db.db, entities)
+}
+
 func (r *SimpleRepo[T]) Update(db SimpleDb, f Filter, entity T) error {
 	return r.repo.Update(context.Background(), db.db, f, entity)
 }

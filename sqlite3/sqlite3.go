@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/meowmeowcode/hohin"
+	"github.com/meowmeowcode/hohin/maps"
 	"github.com/meowmeowcode/hohin/operations"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
@@ -15,6 +16,7 @@ type Executor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }
 
 type Db struct {
@@ -211,30 +213,8 @@ func applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 		s.Add(f.Field, " >= ").AddParam(f.Value)
 	case operations.In:
 		switch val := f.Value.(type) {
-		case []int:
-			s.Add(f.Field, " IN (")
-			for _, i := range val {
-				s.AddParam(i)
-				s.Add(", ")
-			}
-			s.Pop()
-			s.Add(")")
-		case []float64:
-			s.Add(f.Field, " IN (")
-			for _, i := range val {
-				s.AddParam(i)
-				s.Add(", ")
-			}
-			s.Pop()
-			s.Add(")")
-		case []string:
-			s.Add(f.Field, " IN (")
-			for _, i := range val {
-				s.AddParam(i)
-				s.Add(", ")
-			}
-			s.Pop()
-			s.Add(")")
+		case []any:
+			s.Add(f.Field, " IN (").AddParamsSep(", ", val...).Add(")")
 		default:
 			return fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
@@ -287,18 +267,8 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 	if err != nil {
 		return err
 	}
-	columns := make([]string, 0, len(data))
-	values := make([]any, 0, len(data))
-	for k, v := range data {
-		columns = append(columns, k)
-		values = append(values, v)
-	}
-	query, params := NewSql("INSERT INTO ", r.table, " (").
-		AddSep(", ", columns...).
-		Add(") VALUES (").
-		AddParamsSep(", ", values...).
-		Add(")").
-		Build()
+	columns, values := maps.Split(data)
+	query, params := r.buildInsertQuery(columns, values)
 	_, err = db.executor.ExecContext(ctx, query, params...)
 	if err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -309,6 +279,50 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 			if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
 				return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 			}
+		}
+	}
+	return nil
+}
+
+func (r *Repo[T]) buildInsertQuery(columns []string, values []any) (string, []any) {
+	return NewSql("INSERT INTO ", r.table, " (").
+		AddSep(", ", columns...).
+		Add(") VALUES (").
+		AddParamsSep(", ", values...).
+		Add(")").
+		Build()
+}
+
+func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
+	if len(entities) == 0 {
+		return nil
+	}
+	db := d.(*Db)
+	var data []map[string]any
+	for _, e := range entities {
+		d, err := r.dump(e)
+		if err != nil {
+			return err
+		}
+		data = append(data, d)
+	}
+	columns, values := maps.Split(data[0])
+	query, _ := r.buildInsertQuery(columns, values)
+	stmt, err := db.executor.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, d := range data {
+		values := make([]any, 0, len(d))
+		for _, c := range columns {
+			_, p := dialect.ProcessParam(d[c], 0)
+			values = append(values, p)
+		}
+		_, err = stmt.ExecContext(ctx, values...)
+		if err != nil {
+			panic(err)
+			return err
 		}
 	}
 	return nil

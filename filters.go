@@ -36,7 +36,7 @@ func Gte(field string, value any) Filter {
 	return Filter{Field: field, Operation: operations.Gte, Value: value}
 }
 
-func In(field string, value any) Filter {
+func In(field string, value []any) Filter {
 	return Filter{Field: field, Operation: operations.In, Value: value}
 }
 

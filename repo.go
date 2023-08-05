@@ -13,6 +13,7 @@ type Repo[T any] interface {
 	GetMany(context.Context, Db, Query) ([]T, error)
 	GetFirst(context.Context, Db, Query) (T, error)
 	Add(context.Context, Db, T) error
+	AddMany(context.Context, Db, []T) error
 	Update(context.Context, Db, Filter, T) error
 	Delete(context.Context, Db, Filter) error
 	Exists(context.Context, Db, Filter) (bool, error)
