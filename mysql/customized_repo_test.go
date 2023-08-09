@@ -49,18 +49,18 @@ GROUP BY contacts.id, contacts.name) AS query
 			qs := make([]*sqldb.Sql, 0)
 			for _, e := range c.Emails {
 				q := NewSql("INSERT INTO emails (id, email, contact_id) VALUES (").
-					AddParamsSep(", ", uuid.New(), e, c.Pk).
+					JoinParams(", ", uuid.New(), e, c.Pk).
 					Add(")")
 				qs = append(qs, q)
 			}
 			return qs
 		},
 		AfterUpdate: func(c Contact) []*sqldb.Sql {
-			qs := []*sqldb.Sql{NewSql("DELETE FROM emails WHERE contact_id = ").AddParam(c.Pk)}
+			qs := []*sqldb.Sql{NewSql("DELETE FROM emails WHERE contact_id = ").Param(c.Pk)}
 
 			for _, e := range c.Emails {
 				q := NewSql("INSERT INTO emails (id, email, contact_id) VALUES (").
-					AddParamsSep(", ", uuid.New(), e, c.Pk).
+					JoinParams(", ", uuid.New(), e, c.Pk).
 					Add(")")
 				qs = append(qs, q)
 			}

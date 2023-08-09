@@ -24,14 +24,14 @@ func (s *Sql) Add(strs ...string) *Sql {
 	return s
 }
 
-func (s *Sql) AddParam(p any) *Sql {
+func (s *Sql) Param(p any) *Sql {
 	str, param := s.dialect.ProcessParam(p, len(s.params)+1)
 	s.params = append(s.params, param)
 	s.strs = append(s.strs, str)
 	return s
 }
 
-func (s *Sql) AddSep(sep string, strs ...string) *Sql {
+func (s *Sql) Join(sep string, strs ...string) *Sql {
 	count := len(strs)
 	for i, str := range strs {
 		s.Add(str)
@@ -42,10 +42,10 @@ func (s *Sql) AddSep(sep string, strs ...string) *Sql {
 	return s
 }
 
-func (s *Sql) AddParamsSep(sep string, ps ...any) *Sql {
+func (s *Sql) JoinParams(sep string, ps ...any) *Sql {
 	count := len(ps)
 	for i, p := range ps {
-		s.AddParam(p)
+		s.Param(p)
 		if i < count-1 {
 			s.Add(sep)
 		}
@@ -53,7 +53,7 @@ func (s *Sql) AddParamsSep(sep string, ps ...any) *Sql {
 	return s
 }
 
-func (s *Sql) Pop() *Sql {
+func (s *Sql) RemoveLast() *Sql {
 	s.strs = s.strs[:len(s.strs)-1]
 	return s
 }

@@ -94,7 +94,7 @@ func NewRepo[T any](conf Conf[T]) *Repo[T] {
 	if conf.Query != "" {
 		r.query = conf.Query
 	} else {
-		r.query = NewSql("SELECT ").AddSep(", ", r.columns...).Add(" FROM ", r.table).String()
+		r.query = NewSql("SELECT ").Join(", ", r.columns...).Add(" FROM ", r.table).String()
 	}
 
 	if conf.Dump != nil {
@@ -169,38 +169,38 @@ func applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 			applyFilter(s, filter)
 			s.Add(" AND ")
 		}
-		s.Pop()
+		s.RemoveLast()
 	case operations.Or:
 		for _, filter := range f.Value.([]hohin.Filter) {
 			applyFilter(s, filter)
 			s.Add(" OR ")
 		}
-		s.Pop()
+		s.RemoveLast()
 	case operations.Eq:
-		s.Add(f.Field, " = ").AddParam(f.Value)
+		s.Add(f.Field, " = ").Param(f.Value)
 	case operations.Ne:
-		s.Add(f.Field, " != ").AddParam(f.Value)
+		s.Add(f.Field, " != ").Param(f.Value)
 	case operations.Lt:
-		s.Add(f.Field, " < ").AddParam(f.Value)
+		s.Add(f.Field, " < ").Param(f.Value)
 	case operations.Gt:
-		s.Add(f.Field, " > ").AddParam(f.Value)
+		s.Add(f.Field, " > ").Param(f.Value)
 	case operations.Lte:
-		s.Add(f.Field, " <= ").AddParam(f.Value)
+		s.Add(f.Field, " <= ").Param(f.Value)
 	case operations.Gte:
-		s.Add(f.Field, " >= ").AddParam(f.Value)
+		s.Add(f.Field, " >= ").Param(f.Value)
 	case operations.In:
 		switch val := f.Value.(type) {
 		case []any:
-			s.Add(f.Field, " IN (").AddParamsSep(", ", val...).Add(")")
+			s.Add(f.Field, " IN (").JoinParams(", ", val...).Add(")")
 		default:
 			return fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
 	case operations.Contains:
-		s.Add(f.Field, " like '%' || ").AddParam(f.Value).Add(" || '%' ")
+		s.Add(f.Field, " like '%' || ").Param(f.Value).Add(" || '%' ")
 	case operations.HasPrefix:
-		s.Add(f.Field, " like ").AddParam(f.Value).Add(" || '%' ")
+		s.Add(f.Field, " like ").Param(f.Value).Add(" || '%' ")
 	case operations.HasSuffix:
-		s.Add(f.Field, " like '%' || ").AddParam(f.Value)
+		s.Add(f.Field, " like '%' || ").Param(f.Value)
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
 	}
@@ -263,9 +263,9 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 
 func (r *Repo[T]) buildInsertQuery(columns []string, values []any) (string, []any) {
 	return NewSql("INSERT INTO ", r.table, " (").
-		AddSep(", ", columns...).
+		Join(", ", columns...).
 		Add(") VALUES (").
-		AddParamsSep(", ", values...).
+		JoinParams(", ", values...).
 		Add(")").
 		Build()
 }
@@ -325,10 +325,10 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	sql := NewSql("ALTER TABLE ", r.table, " UPDATE ")
 	for k, v := range data {
 		if v != oldData[k] {
-			sql.Add(k, " = ").AddParam(v).Add(", ")
+			sql.Add(k, " = ").Param(v).Add(", ")
 		}
 	}
-	sql.Pop().Add(" WHERE ")
+	sql.RemoveLast().Add(" WHERE ")
 	applyFilter(sql, f)
 	query, params := sql.Build()
 	if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
@@ -379,13 +379,13 @@ func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, 
 			}
 			sql.Add(", ")
 		}
-		sql.Pop()
+		sql.RemoveLast()
 	}
 	if q.Limit > 0 {
-		sql.Add(" LIMIT ").AddParam(q.Limit)
+		sql.Add(" LIMIT ").Param(q.Limit)
 	}
 	if q.Offset > 0 {
-		sql.Add(" OFFSET ").AddParam(q.Offset)
+		sql.Add(" OFFSET ").Param(q.Offset)
 	}
 	query, params := sql.Build()
 	rows, err := db.executor.QueryContext(ctx, query, params...)
