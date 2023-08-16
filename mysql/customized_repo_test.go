@@ -69,11 +69,13 @@ GROUP BY contacts.id, contacts.name) AS query
 	}).Simple()
 }
 
-func makeContactsDb() hohin.SimpleDb {
+func TestCustomizedRepo(t *testing.T) {
 	pool, err := sql.Open("mysql", "hohin:hohin@/hohin?parseTime=true")
 	if err != nil {
 		panic(err)
 	}
+	defer pool.Close()
+
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS contacts (
     Id char(36) PRIMARY KEY,
@@ -83,6 +85,12 @@ CREATE TABLE IF NOT EXISTS contacts (
 	if err != nil {
 		panic(err)
 	}
+	defer func() {
+		if _, err := pool.Exec(`DROP TABLE IF EXISTS contacts`); err != nil {
+			panic(err)
+		}
+	}()
+
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS emails (
     Id char(36) PRIMARY KEY,
@@ -90,42 +98,52 @@ CREATE TABLE IF NOT EXISTS emails (
     contact_id char(36) REFERENCES contacts(id) ON DELETE CASCADE
 )
     `)
-	_, err = pool.Exec(`DELETE FROM contacts`)
 	if err != nil {
 		panic(err)
 	}
-	_, err = pool.Exec(`DELETE FROM emails`)
-	if err != nil {
-		panic(err)
-	}
-	return NewDb(pool).Simple()
-}
+	defer func() {
+		if _, err := pool.Exec(`DROP TABLE IF EXISTS emails`); err != nil {
+			panic(err)
+		}
+	}()
 
-func TestOneToMany(t *testing.T) {
-	db := makeContactsDb()
+	cleanDb := func() {
+		if _, err := pool.Exec(`DELETE FROM contacts`); err != nil {
+			panic(err)
+		}
+		if _, err := pool.Exec(`DELETE FROM emails`); err != nil {
+			panic(err)
+		}
+	}
+
+	db := NewDb(pool).Simple()
 	repo := makeContactsRepo()
-	bob := Contact{Pk: uuid.New(), Name: "Bob", Emails: []string{"bob123@test.com", "bob@test.com"}}
-	err := repo.Add(db, bob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	alice := Contact{Pk: uuid.New(), Name: "Alice", Emails: []string{"alice@test.com"}}
-	err = repo.Add(db, alice)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := repo.Get(db, hohin.Eq("Name", "Bob"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !b.Equal(&bob) {
-		t.Fatalf("%v != %v", b, bob)
-	}
-	a, err := repo.Get(db, hohin.Eq("Name", "Alice"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !a.Equal(&alice) {
-		t.Fatalf("%v != %v", a, alice)
-	}
+
+	t.Run("TestOneToMany", func(t *testing.T) {
+		cleanDb()
+		bob := Contact{Pk: uuid.New(), Name: "Bob", Emails: []string{"bob123@test.com", "bob@test.com"}}
+		err := repo.Add(db, bob)
+		if err != nil {
+			t.Fatal(err)
+		}
+		alice := Contact{Pk: uuid.New(), Name: "Alice", Emails: []string{"alice@test.com"}}
+		err = repo.Add(db, alice)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, err := repo.Get(db, hohin.Eq("Name", "Bob"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !b.Equal(&bob) {
+			t.Fatalf("%v != %v", b, bob)
+		}
+		a, err := repo.Get(db, hohin.Eq("Name", "Alice"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !a.Equal(&alice) {
+			t.Fatalf("%v != %v", a, alice)
+		}
+	})
 }
