@@ -114,7 +114,7 @@ func TestRepo(t *testing.T) {
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS users (
     Id char(36) PRIMARY KEY,
-    Name varchar(100) NOT NULL,
+    Name varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     Age bigint NOT NULL,
     Active bool NOT NULL,
     Weight double NOT NULL,
@@ -471,7 +471,23 @@ CREATE TABLE IF NOT EXISTS users (
 				result: []User{bob},
 			},
 			{
+				filter: hohin.Eq("Name", "bob"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IEq("Name", "bob"),
+				result: []User{bob},
+			},
+			{
 				filter: hohin.Ne("Name", "Bob"),
+				result: []User{alice, eve},
+			},
+			{
+				filter: hohin.Ne("Name", "bob"),
+				result: []User{alice, bob, eve},
+			},
+			{
+				filter: hohin.INe("Name", "bob"),
 				result: []User{alice, eve},
 			},
 			{
@@ -483,11 +499,35 @@ CREATE TABLE IF NOT EXISTS users (
 				result: []User{alice},
 			},
 			{
+				filter: hohin.HasPrefix("Name", "a"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IHasPrefix("Name", "a"),
+				result: []User{alice},
+			},
+			{
 				filter: hohin.HasSuffix("Name", "e"),
 				result: []User{alice, eve},
 			},
 			{
+				filter: hohin.HasSuffix("Name", "E"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IHasSuffix("Name", "E"),
+				result: []User{alice, eve},
+			},
+			{
 				filter: hohin.Contains("Name", "o"),
+				result: []User{bob},
+			},
+			{
+				filter: hohin.Contains("Name", "O"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IContains("Name", "O"),
 				result: []User{bob},
 			},
 			// time.Time operations:

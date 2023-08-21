@@ -12,8 +12,16 @@ func Eq(field string, value any) Filter {
 	return Filter{Field: field, Operation: operations.Eq, Value: value}
 }
 
+func IEq(field string, value any) Filter {
+	return Filter{Field: field, Operation: operations.IEq, Value: value}
+}
+
 func Ne(field string, value any) Filter {
 	return Filter{Field: field, Operation: operations.Ne, Value: value}
+}
+
+func INe(field string, value any) Filter {
+	return Filter{Field: field, Operation: operations.INe, Value: value}
 }
 
 func IsNone(field string) Filter {
@@ -44,12 +52,24 @@ func Contains(field string, value string) Filter {
 	return Filter{Field: field, Operation: operations.Contains, Value: value}
 }
 
+func IContains(field string, value string) Filter {
+	return Filter{Field: field, Operation: operations.IContains, Value: value}
+}
+
 func HasPrefix(field string, value string) Filter {
 	return Filter{Field: field, Operation: operations.HasPrefix, Value: value}
 }
 
+func IHasPrefix(field string, value string) Filter {
+	return Filter{Field: field, Operation: operations.IHasPrefix, Value: value}
+}
+
 func HasSuffix(field string, value string) Filter {
 	return Filter{Field: field, Operation: operations.HasSuffix, Value: value}
+}
+
+func IHasSuffix(field string, value string) Filter {
+	return Filter{Field: field, Operation: operations.IHasSuffix, Value: value}
 }
 
 func And(value ...Filter) Filter {

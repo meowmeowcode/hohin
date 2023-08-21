@@ -178,8 +178,12 @@ func applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 		s.RemoveLast()
 	case operations.Eq:
 		s.Add(f.Field, " = ").Param(f.Value)
+	case operations.IEq:
+		s.Add(f.Field, " ILIKE ").Param(f.Value)
 	case operations.Ne:
 		s.Add(f.Field, " != ").Param(f.Value)
+	case operations.INe:
+		s.Add(f.Field, " NOT ILIKE ").Param(f.Value)
 	case operations.Lt:
 		s.Add(f.Field, " < ").Param(f.Value)
 	case operations.Gt:
@@ -196,11 +200,17 @@ func applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 			return fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
 	case operations.Contains:
-		s.Add(f.Field, " like '%' || ").Param(f.Value).Add(" || '%' ")
+		s.Add(f.Field, " LIKE '%' || ").Param(f.Value).Add(" || '%' ")
+	case operations.IContains:
+		s.Add(f.Field, " ILIKE '%' || ").Param(f.Value).Add(" || '%' ")
 	case operations.HasPrefix:
-		s.Add(f.Field, " like ").Param(f.Value).Add(" || '%' ")
+		s.Add(f.Field, " LIKE ").Param(f.Value).Add(" || '%' ")
+	case operations.IHasPrefix:
+		s.Add(f.Field, " ILIKE ").Param(f.Value).Add(" || '%' ")
 	case operations.HasSuffix:
-		s.Add(f.Field, " like '%' || ").Param(f.Value)
+		s.Add(f.Field, " LIKE '%' || ").Param(f.Value)
+	case operations.IHasSuffix:
+		s.Add(f.Field, " ILIKE '%' || ").Param(f.Value)
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
 	}

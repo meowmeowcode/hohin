@@ -111,6 +111,11 @@ func TestRepo(t *testing.T) {
 	}
 	defer pool.Close()
 
+	_, err = pool.Exec(`PRAGMA case_sensitive_like=ON`)
+	if err != nil {
+		panic(err)
+	}
+
 	_, err = pool.Exec(`
 CREATE TABLE IF NOT EXISTS users (
     Id uuid PRIMARY KEY,
@@ -482,7 +487,23 @@ CREATE TABLE IF NOT EXISTS users (
 				result: []User{bob},
 			},
 			{
+				filter: hohin.Eq("Name", "bob"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IEq("Name", "bob"),
+				result: []User{bob},
+			},
+			{
 				filter: hohin.Ne("Name", "Bob"),
+				result: []User{alice, eve},
+			},
+			{
+				filter: hohin.Ne("Name", "bob"),
+				result: []User{alice, bob, eve},
+			},
+			{
+				filter: hohin.INe("Name", "bob"),
 				result: []User{alice, eve},
 			},
 			{
@@ -494,11 +515,35 @@ CREATE TABLE IF NOT EXISTS users (
 				result: []User{alice},
 			},
 			{
+				filter: hohin.HasPrefix("Name", "a"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IHasPrefix("Name", "a"),
+				result: []User{alice},
+			},
+			{
 				filter: hohin.HasSuffix("Name", "e"),
 				result: []User{alice, eve},
 			},
 			{
+				filter: hohin.HasSuffix("Name", "E"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IHasSuffix("Name", "E"),
+				result: []User{alice, eve},
+			},
+			{
 				filter: hohin.Contains("Name", "o"),
+				result: []User{bob},
+			},
+			{
+				filter: hohin.Contains("Name", "O"),
+				result: []User{},
+			},
+			{
+				filter: hohin.IContains("Name", "O"),
 				result: []User{bob},
 			},
 			// time.Time operations:

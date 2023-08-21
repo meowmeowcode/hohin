@@ -286,6 +286,13 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
+	case operations.IEq:
+		switch val := f.Value.(type) {
+		case string:
+			return strings.ToUpper(field.String()) == strings.ToUpper(val), nil
+		default:
+			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
+		}
 	case operations.Ne:
 		switch val := f.Value.(type) {
 		case int:
@@ -302,6 +309,13 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 			return !field.Interface().(decimal.Decimal).Equal(val), nil
 		case uuid.UUID:
 			return field.Interface().(uuid.UUID) != val, nil
+		default:
+			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
+		}
+	case operations.INe:
+		switch val := f.Value.(type) {
+		case string:
+			return strings.ToUpper(field.String()) != strings.ToUpper(val), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
@@ -364,6 +378,13 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
+	case operations.IHasPrefix:
+		switch val := f.Value.(type) {
+		case string:
+			return strings.HasPrefix(strings.ToUpper(field.String()), strings.ToUpper(val)), nil
+		default:
+			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
+		}
 	case operations.HasSuffix:
 		switch val := f.Value.(type) {
 		case string:
@@ -371,10 +392,24 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
+	case operations.IHasSuffix:
+		switch val := f.Value.(type) {
+		case string:
+			return strings.HasSuffix(strings.ToUpper(field.String()), strings.ToUpper(val)), nil
+		default:
+			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
+		}
 	case operations.Contains:
 		switch val := f.Value.(type) {
 		case string:
 			return strings.Contains(field.String(), val), nil
+		default:
+			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
+		}
+	case operations.IContains:
+		switch val := f.Value.(type) {
+		case string:
+			return strings.Contains(strings.ToUpper(field.String()), strings.ToUpper(val)), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
