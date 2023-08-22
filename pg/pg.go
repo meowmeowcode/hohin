@@ -69,6 +69,7 @@ type Scanner interface {
 
 type Repo[T any] struct {
 	table           string
+	mapping         map[string]string
 	fields          []string
 	columns         []string
 	query           string
@@ -97,22 +98,19 @@ func NewRepo[T any](conf Conf[T]) *Repo[T] {
 	r := &Repo[T]{table: conf.Table}
 
 	if conf.Mapping != nil {
-		r.fields = make([]string, 0, len(conf.Mapping))
-		r.columns = make([]string, 0, len(conf.Mapping))
-		for field, column := range conf.Mapping {
-			r.fields = append(r.fields, field)
-			r.columns = append(r.columns, column)
-		}
+		r.mapping = conf.Mapping
 	} else {
 		var entity T
 		v := reflect.ValueOf(entity)
 		t := v.Type()
+		r.mapping = make(map[string]string)
 		for i := 0; i < v.NumField(); i++ {
-			r.fields = append(r.fields, t.Field(i).Name)
+			field := t.Field(i).Name
+			r.mapping[field] = field
 		}
-		r.columns = make([]string, len(r.fields))
-		copy(r.columns, r.fields)
 	}
+
+	r.fields, r.columns = maps.Split(r.mapping)
 
 	if conf.Query != "" {
 		r.query = conf.Query
@@ -166,7 +164,7 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error
 	}
 	db := d.(*Db)
 	sqlBuilder := NewSql(r.query, " WHERE ")
-	if err := applyFilter(sqlBuilder, f); err != nil {
+	if err := r.applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
 	}
 	query, params := sqlBuilder.Build()
@@ -181,59 +179,63 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error
 	return entity, nil
 }
 
-func applyFilter(s *sqldb.Sql, f hohin.Filter) error {
+func (r *Repo[T]) applyFilter(s *sqldb.Sql, f hohin.Filter) error {
+	col, ok := r.mapping[f.Field]
+	if len(f.Field) > 0 && !ok {
+		return fmt.Errorf("unknown field `%s` in a filter", f.Field)
+	}
 	switch f.Operation {
 	case operations.Not:
 		s.Add("NOT (")
-		applyFilter(s, f.Value.(hohin.Filter))
+		r.applyFilter(s, f.Value.(hohin.Filter))
 		s.Add(")")
 	case operations.And:
 		for _, filter := range f.Value.([]hohin.Filter) {
-			applyFilter(s, filter)
+			r.applyFilter(s, filter)
 			s.Add(" AND ")
 		}
 		s.RemoveLast()
 	case operations.Or:
 		for _, filter := range f.Value.([]hohin.Filter) {
-			applyFilter(s, filter)
+			r.applyFilter(s, filter)
 			s.Add(" OR ")
 		}
 		s.RemoveLast()
 	case operations.Eq:
-		s.Add(f.Field, " = ").Param(f.Value)
+		s.Add(col, " = ").Param(f.Value)
 	case operations.IEq:
-		s.Add(f.Field, " ILIKE ").Param(f.Value)
+		s.Add(col, " ILIKE ").Param(f.Value)
 	case operations.Ne:
-		s.Add(f.Field, " != ").Param(f.Value)
+		s.Add(col, " != ").Param(f.Value)
 	case operations.INe:
-		s.Add(f.Field, " NOT ILIKE ").Param(f.Value)
+		s.Add(col, " NOT ILIKE ").Param(f.Value)
 	case operations.Lt:
-		s.Add(f.Field, " < ").Param(f.Value)
+		s.Add(col, " < ").Param(f.Value)
 	case operations.Gt:
-		s.Add(f.Field, " > ").Param(f.Value)
+		s.Add(col, " > ").Param(f.Value)
 	case operations.Lte:
-		s.Add(f.Field, " <= ").Param(f.Value)
+		s.Add(col, " <= ").Param(f.Value)
 	case operations.Gte:
-		s.Add(f.Field, " >= ").Param(f.Value)
+		s.Add(col, " >= ").Param(f.Value)
 	case operations.In:
 		switch val := f.Value.(type) {
 		case []any:
-			s.Add(f.Field, " IN (").JoinParams(", ", val...).Add(")")
+			s.Add(col, " IN (").JoinParams(", ", val...).Add(")")
 		default:
 			return fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
 	case operations.Contains:
-		s.Add(f.Field, " LIKE '%' || ").Param(f.Value).Add(" || '%' ")
+		s.Add(col, " LIKE '%' || ").Param(f.Value).Add(" || '%' ")
 	case operations.IContains:
-		s.Add(f.Field, " ILIKE '%' || ").Param(f.Value).Add(" || '%' ")
+		s.Add(col, " ILIKE '%' || ").Param(f.Value).Add(" || '%' ")
 	case operations.HasPrefix:
-		s.Add(f.Field, " LIKE ").Param(f.Value).Add(" || '%' ")
+		s.Add(col, " LIKE ").Param(f.Value).Add(" || '%' ")
 	case operations.IHasPrefix:
-		s.Add(f.Field, " ILIKE ").Param(f.Value).Add(" || '%' ")
+		s.Add(col, " ILIKE ").Param(f.Value).Add(" || '%' ")
 	case operations.HasSuffix:
-		s.Add(f.Field, " LIKE '%' || ").Param(f.Value)
+		s.Add(col, " LIKE '%' || ").Param(f.Value)
 	case operations.IHasSuffix:
-		s.Add(f.Field, " ILIKE '%' || ").Param(f.Value)
+		s.Add(col, " ILIKE '%' || ").Param(f.Value)
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
 	}
@@ -247,7 +249,7 @@ func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.Db, f hohin.Filter) 
 	}
 	db := d.(*Db)
 	sqlBuilder := NewSql(r.query, " WHERE ")
-	if err := applyFilter(sqlBuilder, f); err != nil {
+	if err := r.applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
 	}
 	sqlBuilder.Add(" FOR UPDATE")
@@ -267,7 +269,7 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 	var result bool
 	db := d.(*Db)
 	sql := NewSql("SELECT EXISTS (", r.query, " WHERE ")
-	applyFilter(sql, f)
+	r.applyFilter(sql, f)
 	sql.Add(")")
 	query, params := sql.Build()
 	row := db.executor.QueryRowContext(ctx, query, params...)
@@ -281,7 +283,7 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error {
 	db := d.(*Db)
 	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
-	applyFilter(sql, f)
+	r.applyFilter(sql, f)
 	query, params := sql.Build()
 	_, err := db.executor.ExecContext(ctx, query, params...)
 	if err != nil {
@@ -368,7 +370,7 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 		sql.Add(k, " = ").Param(v).Add(", ")
 	}
 	sql.RemoveLast().Add(" WHERE ")
-	applyFilter(sql, f)
+	r.applyFilter(sql, f)
 	query, params := sql.Build()
 	if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -388,7 +390,7 @@ func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, er
 	var result int
 	db := d.(*Db)
 	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
-	applyFilter(sql, f)
+	r.applyFilter(sql, f)
 	sql.Add(") AS q")
 	query, params := sql.Build()
 	row := db.executor.QueryRowContext(ctx, query, params...)
@@ -405,7 +407,7 @@ func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, 
 	sql := NewSql(r.query)
 	if q.Filter.Operation != "" {
 		sql.Add(" WHERE ")
-		if err := applyFilter(sql, q.Filter); err != nil {
+		if err := r.applyFilter(sql, q.Filter); err != nil {
 			return nil, err
 		}
 	}

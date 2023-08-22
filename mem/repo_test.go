@@ -586,6 +586,18 @@ func TestRepo(t *testing.T) {
 		}
 	})
 
+	t.Run("TestUnknownField", func(t *testing.T) {
+		cleanDb()
+		addAlice(db, repo)
+		_, err := repo.Get(db, hohin.Eq("Test", "something"))
+		if err == nil {
+			t.Fatalf("err is nil")
+		}
+		if err.Error() != "unknown field `Test` in a filter" {
+			t.Fatalf("Unexpected message `%s`", err.Error())
+		}
+	})
+
 	t.Run("TestCountAll", func(t *testing.T) {
 		cleanDb()
 		addAlice(db, repo)

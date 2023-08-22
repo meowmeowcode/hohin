@@ -265,6 +265,9 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 
 	s := reflect.ValueOf(entity)
 	field := s.FieldByName(f.Field)
+	if !field.IsValid() {
+		return false, fmt.Errorf("unknown field `%s` in a filter", f.Field)
+	}
 
 	switch f.Operation {
 	case operations.Eq:
