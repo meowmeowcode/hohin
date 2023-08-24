@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS users (
 	db := NewDb(pool).Simple()
 	repo := NewRepo(Conf[User]{
 		Table: "users",
+		Query: "SELECT Id, Name, Age, Active, Weight, Money, RegisteredAt FROM users",
 		Load: func(row Scanner) (User, error) {
 			var u User
 			var registeredAt string
