@@ -17,6 +17,7 @@ type User struct {
 	Active       bool
 	Weight       float64
 	Money        decimal.Decimal
+	IpAddress    string
 	RegisteredAt time.Time
 }
 
@@ -26,8 +27,9 @@ func (u *User) Equal(u2 *User) bool {
 		u.Age == u2.Age &&
 		u.Active == u2.Active &&
 		u.Weight == u2.Weight &&
-		u.RegisteredAt == u2.RegisteredAt &&
-		u.Money.Equal(u2.Money)
+		u.Money.Equal(u2.Money) &&
+		u.IpAddress == u2.IpAddress &&
+		u.RegisteredAt == u2.RegisteredAt
 }
 
 func usersEqual(u, u2 []User) bool {
@@ -55,8 +57,9 @@ func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Age:          23,
 		Active:       true,
 		Weight:       60.5,
-		RegisteredAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 		Money:        money,
+		IpAddress:    "192.168.1.1",
+		RegisteredAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
 		panic(err)
@@ -75,8 +78,9 @@ func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Age:          27,
 		Active:       true,
 		Weight:       75.6,
-		RegisteredAt: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.UTC),
 		Money:        money,
+		IpAddress:    "192.168.1.2",
+		RegisteredAt: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
 		panic(err)
@@ -94,8 +98,9 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Name:         "Eve",
 		Age:          36,
 		Weight:       75.7,
-		RegisteredAt: time.Date(2009, time.October, 10, 23, 0, 0, 0, time.UTC),
 		Money:        money,
+		IpAddress:    "192.168.2.1",
+		RegisteredAt: time.Date(2009, time.October, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
 		panic(err)
@@ -110,25 +115,25 @@ func TestRepo(t *testing.T) {
 	}
 	defer pool.Close()
 
+	if _, err := pool.Exec(`DROP TABLE IF EXISTS users`); err != nil {
+		panic(err)
+	}
+
 	_, err = pool.Exec(`
-CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE users (
     Id UUID NOT NULL,
     Name String NOT NULL,
     Age UInt32 NOT NULL,
     Active Boolean NOT NULL,
     Weight Float64 NOT NULL,
     Money Decimal(12, 2) NOT NULL,
+    IpAddress String NOT NULL,
     RegisteredAt DateTime64 NOT NULL
 ) ENGINE = MergeTree() ORDER BY RegisteredAt
        `)
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		if _, err := pool.Exec(`DROP TABLE IF EXISTS users`); err != nil {
-			panic(err)
-		}
-	}()
 
 	cleanDb := func() {
 		if _, err = pool.Exec(`TRUNCATE TABLE users`); err != nil {
@@ -562,6 +567,15 @@ CREATE TABLE IF NOT EXISTS users (
 			{
 				filter: hohin.Ne("Id", eve.Id),
 				result: []User{alice, bob},
+			},
+			// Network operations:
+			{
+				filter: hohin.IpWithin("IpAddress", "192.168.1.0/24"),
+				result: []User{alice, bob},
+			},
+			{
+				filter: hohin.IpWithin("IpAddress", "192.168.2.0/24"),
+				result: []User{eve},
 			},
 			// Not, And, Or:
 			{

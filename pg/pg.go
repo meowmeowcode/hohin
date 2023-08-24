@@ -236,6 +236,8 @@ func (r *Repo[T]) applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 		s.Add(col, " LIKE '%' || ").Param(f.Value)
 	case operations.IHasSuffix:
 		s.Add(col, " ILIKE '%' || ").Param(f.Value)
+	case operations.IpWithin:
+		s.Add(col, "::inet << ").Param(f.Value).Add("::inet")
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
 	}

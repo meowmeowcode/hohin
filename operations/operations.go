@@ -19,6 +19,7 @@ const (
 	IHasPrefix Operation = "IHasPrefix"
 	HasSuffix  Operation = "HasSuffix"
 	IHasSuffix Operation = "IHasSuffix"
+	IpWithin   Operation = "IpWithin"
 	And        Operation = "And"
 	Or         Operation = "Or"
 	Not        Operation = "Not"

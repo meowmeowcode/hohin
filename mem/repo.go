@@ -8,6 +8,7 @@ import (
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/operations"
 	"github.com/shopspring/decimal"
+	"net"
 	"reflect"
 	"sort"
 	"strings"
@@ -413,6 +414,21 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		switch val := f.Value.(type) {
 		case string:
 			return strings.Contains(strings.ToUpper(field.String()), strings.ToUpper(val)), nil
+		default:
+			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
+		}
+	case operations.IpWithin:
+		switch val := f.Value.(type) {
+		case string:
+			_, network, err := net.ParseCIDR(val)
+			if err != nil {
+				return false, err
+			}
+			ip := net.ParseIP(field.String())
+			if ip == nil {
+				return false, fmt.Errorf("%s is not a valid IP address", field.String())
+			}
+			return network.Contains(ip), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
