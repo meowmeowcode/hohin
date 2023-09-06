@@ -1,9 +1,9 @@
 package pg
 
 import (
-	"database/sql"
+	"context"
 	"github.com/google/uuid"
-	"github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
@@ -35,7 +35,7 @@ GROUP BY contacts.id, contacts.name) AS query
         `,
 		Load: func(row Scanner) (Contact, error) {
 			var entity Contact
-			err := row.Scan(&entity.Pk, &entity.Name, (*pq.StringArray)(&entity.Emails))
+			err := row.Scan(&entity.Pk, &entity.Name, &entity.Emails)
 			return entity, err
 		},
 		AfterAdd: func(c Contact) []*sqldb.Sql {
@@ -62,46 +62,15 @@ GROUP BY contacts.id, contacts.name) AS query
 	}).Simple()
 }
 
-func makeContactsDb() hohin.SimpleDb {
-	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
-	if err != nil {
-		panic(err)
-	}
-	_, err = pool.Exec(`
-CREATE TABLE IF NOT EXISTS contacts (
-    id uuid PRIMARY KEY,
-    name text NOT NULL
-)
-    `)
-	if err != nil {
-		panic(err)
-	}
-	_, err = pool.Exec(`
-CREATE TABLE IF NOT EXISTS emails (
-    id uuid PRIMARY KEY,
-    email text NOT NULL UNIQUE,
-    contact_id uuid REFERENCES contacts(id) ON DELETE CASCADE
-)
-    `)
-	_, err = pool.Exec(`DELETE FROM contacts`)
-	if err != nil {
-		panic(err)
-	}
-	_, err = pool.Exec(`DELETE FROM emails`)
-	if err != nil {
-		panic(err)
-	}
-	return NewDb(pool).Simple()
-}
-
 func TestCustomizedRepo(t *testing.T) {
-	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, "postgresql://hohin:hohin@localhost:5432/hohin?options=-c%20TimeZone%3DUTC")
 	if err != nil {
 		panic(err)
 	}
 	defer pool.Close()
 
-	_, err = pool.Exec(`
+	_, err = pool.Exec(ctx, `
 CREATE TABLE IF NOT EXISTS contacts (
     id uuid PRIMARY KEY,
     name text NOT NULL
@@ -111,12 +80,12 @@ CREATE TABLE IF NOT EXISTS contacts (
 		panic(err)
 	}
 	defer func() {
-		if _, err := pool.Exec(`DROP TABLE IF EXISTS contacts`); err != nil {
+		if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS contacts`); err != nil {
 			panic(err)
 		}
 	}()
 
-	_, err = pool.Exec(`
+	_, err = pool.Exec(ctx, `
 CREATE TABLE IF NOT EXISTS emails (
     id uuid PRIMARY KEY,
     email text NOT NULL UNIQUE,
@@ -124,16 +93,16 @@ CREATE TABLE IF NOT EXISTS emails (
 )
     `)
 	defer func() {
-		if _, err := pool.Exec(`DROP TABLE IF EXISTS emails`); err != nil {
+		if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS emails`); err != nil {
 			panic(err)
 		}
 	}()
 
 	cleanDb := func() {
-		if _, err := pool.Exec(`DELETE FROM contacts`); err != nil {
+		if _, err := pool.Exec(ctx, `DELETE FROM contacts`); err != nil {
 			panic(err)
 		}
-		if _, err := pool.Exec(`DELETE FROM emails`); err != nil {
+		if _, err := pool.Exec(ctx, `DELETE FROM emails`); err != nil {
 			panic(err)
 		}
 	}

@@ -1,15 +1,20 @@
 package pg
 
 import (
-	"database/sql"
+	"context"
 	"errors"
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/meowmeowcode/hohin"
 	"github.com/shopspring/decimal"
+	"net/netip"
 	"testing"
 	"time"
 )
+
+func init() {
+	time.Local = time.UTC
+}
 
 type User struct {
 	Id           uuid.UUID
@@ -18,7 +23,7 @@ type User struct {
 	Active       bool
 	Weight       float64
 	Money        decimal.Decimal
-	IpAddress    string
+	IpAddress    netip.Addr
 	RegisteredAt time.Time
 }
 
@@ -30,7 +35,7 @@ func (u *User) Equal(u2 *User) bool {
 		u.Weight == u2.Weight &&
 		u.Money.Equal(u2.Money) &&
 		u.IpAddress == u2.IpAddress &&
-		u.RegisteredAt == u2.RegisteredAt
+		u.RegisteredAt.Equal(u2.RegisteredAt)
 }
 
 func usersEqual(u, u2 []User) bool {
@@ -59,7 +64,7 @@ func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Active:       true,
 		Weight:       60.5,
 		Money:        money,
-		IpAddress:    "192.168.1.1",
+		IpAddress:    netip.MustParseAddr("192.168.1.1"),
 		RegisteredAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -80,7 +85,7 @@ func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Active:       true,
 		Weight:       75.6,
 		Money:        money,
-		IpAddress:    "192.168.1.2",
+		IpAddress:    netip.MustParseAddr("192.168.1.2"),
 		RegisteredAt: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -100,7 +105,7 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Age:          36,
 		Weight:       75.7,
 		Money:        money,
-		IpAddress:    "192.168.2.1",
+		IpAddress:    netip.MustParseAddr("192.168.2.1"),
 		RegisteredAt: time.Date(2009, time.October, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -110,17 +115,18 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 }
 
 func TestRepo(t *testing.T) {
-	pool, err := sql.Open("postgres", "user=hohin dbname=hohin password=hohin sslmode=disable")
+	ctx := context.Background()
+	pool, err := pgxpool.New(ctx, "postgresql://hohin:hohin@localhost:5432/hohin?options=-c%20TimeZone%3DUTC")
 	if err != nil {
 		panic(err)
 	}
 	defer pool.Close()
 
-	if _, err := pool.Exec(`DROP TABLE IF EXISTS users`); err != nil {
+	if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS users`); err != nil {
 		panic(err)
 	}
 
-	_, err = pool.Exec(`
+	_, err = pool.Exec(ctx, `
 CREATE TABLE users (
     Id uuid PRIMARY KEY,
     Name text NOT NULL,
@@ -128,7 +134,7 @@ CREATE TABLE users (
     Active boolean NOT NULL,
     Weight float8 NOT NULL,
     Money decimal NOT NULL,
-    IpAddress text NOT NULL,
+    IpAddress inet NOT NULL,
     RegisteredAt timestamptz NOT NULL
 )
        `)
@@ -137,7 +143,7 @@ CREATE TABLE users (
 	}
 
 	cleanDb := func() {
-		if _, err = pool.Exec(`DELETE FROM users`); err != nil {
+		if _, err = pool.Exec(ctx, `DELETE FROM users`); err != nil {
 			panic(err)
 		}
 	}
@@ -147,7 +153,11 @@ CREATE TABLE users (
 
 	t.Run("TestAdd", func(t *testing.T) {
 		cleanDb()
-		alice := User{Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)}
+		alice := User{
+			Name:         "Alice",
+			RegisteredAt: time.Now().UTC().Round(time.Second),
+			IpAddress:    netip.MustParseAddr("1.1.1.1"),
+		}
 		if err := repo.Add(db, alice); err != nil {
 			t.Fatal(err)
 		}
@@ -163,8 +173,18 @@ CREATE TABLE users (
 	t.Run("TestAddMany", func(t *testing.T) {
 		cleanDb()
 		users := []User{
-			User{Id: uuid.New(), Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)},
-			User{Id: uuid.New(), Name: "Bob", RegisteredAt: time.Now().UTC().Round(time.Second)},
+			User{
+				Id:           uuid.New(),
+				Name:         "Alice",
+				RegisteredAt: time.Now().UTC().Round(time.Second),
+				IpAddress:    netip.MustParseAddr("1.1.1.1"),
+			},
+			User{
+				Id:           uuid.New(),
+				Name:         "Bob",
+				RegisteredAt: time.Now().UTC().Round(time.Second),
+				IpAddress:    netip.MustParseAddr("2.2.2.2"),
+			},
 		}
 		if err := repo.AddMany(db, users); err != nil {
 			t.Fatal(err)

@@ -1,11 +1,12 @@
 package clickhouse
 
 import (
-	"database/sql"
-	_ "github.com/ClickHouse/clickhouse-go/v2"
+	"context"
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/google/uuid"
 	"github.com/meowmeowcode/hohin"
 	"github.com/shopspring/decimal"
+	"net/netip"
 	"testing"
 	"time"
 )
@@ -17,7 +18,7 @@ type User struct {
 	Active       bool
 	Weight       float64
 	Money        decimal.Decimal
-	IpAddress    string
+	IpAddress    netip.Addr
 	RegisteredAt time.Time
 }
 
@@ -58,7 +59,7 @@ func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Active:       true,
 		Weight:       60.5,
 		Money:        money,
-		IpAddress:    "192.168.1.1",
+		IpAddress:    netip.MustParseAddr("192.168.1.1"),
 		RegisteredAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -79,7 +80,7 @@ func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Active:       true,
 		Weight:       75.6,
 		Money:        money,
-		IpAddress:    "192.168.1.2",
+		IpAddress:    netip.MustParseAddr("192.168.1.2"),
 		RegisteredAt: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -99,7 +100,7 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Age:          36,
 		Weight:       75.7,
 		Money:        money,
-		IpAddress:    "192.168.2.1",
+		IpAddress:    netip.MustParseAddr("192.168.2.1"),
 		RegisteredAt: time.Date(2009, time.October, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -109,17 +110,22 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 }
 
 func TestRepo(t *testing.T) {
-	pool, err := sql.Open("clickhouse", "clickhouse://hohin:hohin@localhost:9000/hohin")
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Addr: []string{"localhost:9000"},
+		Auth: clickhouse.Auth{Database: "hohin", Username: "hohin", Password: "hohin"},
+	})
+
 	if err != nil {
 		panic(err)
 	}
-	defer pool.Close()
+	defer conn.Close()
+	ctx := context.Background()
 
-	if _, err := pool.Exec(`DROP TABLE IF EXISTS users`); err != nil {
+	if err := conn.Exec(ctx, `DROP TABLE IF EXISTS users`); err != nil {
 		panic(err)
 	}
 
-	_, err = pool.Exec(`
+	err = conn.Exec(ctx, `
 CREATE TABLE users (
     Id UUID NOT NULL,
     Name String NOT NULL,
@@ -127,7 +133,7 @@ CREATE TABLE users (
     Active Boolean NOT NULL,
     Weight Float64 NOT NULL,
     Money Decimal(12, 2) NOT NULL,
-    IpAddress String NOT NULL,
+    IpAddress IPv4 NOT NULL,
     RegisteredAt DateTime64 NOT NULL
 ) ENGINE = MergeTree() ORDER BY RegisteredAt
        `)
@@ -136,17 +142,21 @@ CREATE TABLE users (
 	}
 
 	cleanDb := func() {
-		if _, err = pool.Exec(`TRUNCATE TABLE users`); err != nil {
+		if err = conn.Exec(ctx, `TRUNCATE TABLE users`); err != nil {
 			panic(err)
 		}
 	}
 
-	db := NewDb(pool).Simple()
+	db := NewDb(conn).Simple()
 	repo := NewRepo(Conf[User]{Table: "users"}).Simple()
 
 	t.Run("TestAdd", func(t *testing.T) {
 		cleanDb()
-		alice := User{Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)}
+		alice := User{
+			Name:         "Alice",
+			RegisteredAt: time.Now().UTC().Round(time.Second),
+			IpAddress:    netip.MustParseAddr("1.1.1.1"),
+		}
 		if err := repo.Add(db, alice); err != nil {
 			t.Fatal(err)
 		}
@@ -162,8 +172,18 @@ CREATE TABLE users (
 	t.Run("TestAddMany", func(t *testing.T) {
 		cleanDb()
 		users := []User{
-			User{Id: uuid.New(), Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)},
-			User{Id: uuid.New(), Name: "Bob", RegisteredAt: time.Now().UTC().Round(time.Second)},
+			User{
+				Id:           uuid.New(),
+				Name:         "Alice",
+				RegisteredAt: time.Now().UTC().Round(time.Second),
+				IpAddress:    netip.MustParseAddr("1.1.1.1"),
+			},
+			User{
+				Id:           uuid.New(),
+				Name:         "Bob",
+				RegisteredAt: time.Now().UTC().Round(time.Second),
+				IpAddress:    netip.MustParseAddr("2.2.2.2"),
+			},
 		}
 		if err := repo.AddMany(db, users); err != nil {
 			t.Fatal(err)

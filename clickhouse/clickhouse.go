@@ -5,23 +5,23 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/maps"
 	"github.com/meowmeowcode/hohin/operations"
 	"github.com/meowmeowcode/hohin/sqldb"
+	"github.com/shopspring/decimal"
 	"reflect"
 )
 
 type Executor interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
-	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
+	Exec(ctx context.Context, query string, args ...any) error
+	Query(ctx context.Context, query string, args ...any) (driver.Rows, error)
+	QueryRow(ctx context.Context, query string, args ...any) driver.Row
 }
 
 type Db struct {
-	executor Executor
+	conn driver.Conn
 }
 
 func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db) error) error {
@@ -36,8 +36,8 @@ func (db *Db) Simple() hohin.SimpleDb {
 	return hohin.NewSimpleDb(db)
 }
 
-func NewDb(pool *sql.DB) *Db {
-	return &Db{executor: pool}
+func NewDb(conn driver.Conn) *Db {
+	return &Db{conn: conn}
 }
 
 type Scanner interface {
@@ -145,7 +145,7 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error
 		return zero, err
 	}
 	query, params := sqlBuilder.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.conn.QueryRow(ctx, query, params...)
 	entity, err := r.load(row)
 	if err == sql.ErrNoRows {
 		return zero, hohin.NotFound
@@ -214,7 +214,7 @@ func (r *Repo[T]) applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 	case operations.IHasSuffix:
 		s.Add(col, " ILIKE '%' || ").Param(f.Value)
 	case operations.IpWithin:
-		s.Add("isIPAddressInRange(", col, ", ").Param(f.Value).Add(")")
+		s.Add("isIPAddressInRange(toString(", col, "), ").Param(f.Value).Add(")")
 	default:
 		return fmt.Errorf("operation %s is not supported", f.Operation)
 	}
@@ -232,7 +232,7 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 	r.applyFilter(sql, f)
 	sql.Add(")")
 	query, params := sql.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.conn.QueryRow(ctx, query, params...)
 	err := row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -245,7 +245,7 @@ func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error 
 	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
 	r.applyFilter(sql, f)
 	query, params := sql.Build()
-	_, err := db.executor.ExecContext(ctx, query, params...)
+	err := db.conn.Exec(ctx, query, params...)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
@@ -260,14 +260,14 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 	}
 	columns, values := maps.Split(data)
 	query, params := r.buildInsertQuery(columns, values)
-	_, err = db.executor.ExecContext(ctx, query, params...)
+	err = db.conn.Exec(ctx, query, params...)
 	if err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
 	if r.afterAdd != nil {
 		for _, sql := range r.afterAdd(entity) {
 			query, params := sql.Build()
-			if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
+			if err := db.conn.Exec(ctx, query, params...); err != nil {
 				return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 			}
 		}
@@ -299,27 +299,21 @@ func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
 	}
 	columns, values := maps.Split(data[0])
 	query, _ := r.buildInsertQuery(columns, values)
-	scope, err := db.executor.BeginTx(ctx, &sql.TxOptions{})
+	batch, err := db.conn.PrepareBatch(ctx, query)
 	if err != nil {
 		return err
 	}
-	stmt, err := scope.PrepareContext(ctx, query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
 	for _, d := range data {
 		values := make([]any, 0, len(d))
 		for _, c := range columns {
 			values = append(values, d[c])
 		}
-		_, err = stmt.ExecContext(ctx, values...)
+		err = batch.Append(values...)
 		if err != nil {
-			panic(err)
 			return err
 		}
 	}
-	return scope.Commit()
+	return batch.Send()
 }
 
 func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity T) error {
@@ -338,20 +332,27 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	}
 	sql := NewSql("ALTER TABLE ", r.table, " UPDATE ")
 	for k, v := range data {
-		if v != oldData[k] {
+		changed := false
+		switch val := v.(type) {
+		case decimal.Decimal:
+			changed = !val.Equal(oldData[k].(decimal.Decimal))
+		default:
+			changed = val != oldData[k]
+		}
+		if changed {
 			sql.Add(k, " = ").Param(v).Add(", ")
 		}
 	}
 	sql.RemoveLast().Add(" WHERE ")
 	r.applyFilter(sql, f)
 	query, params := sql.Build()
-	if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
+	if err := db.conn.Exec(ctx, query, params...); err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
 	if r.afterUpdate != nil {
 		for _, sql := range r.afterUpdate(entity) {
 			query, params := sql.Build()
-			if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
+			if err := db.conn.Exec(ctx, query, params...); err != nil {
 				return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 			}
 		}
@@ -359,14 +360,14 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	return nil
 }
 
-func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, error) {
-	var result int
+func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64, error) {
+	var result uint64
 	db := d.(*Db)
 	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
 	sql.Add(") AS q")
 	query, params := sql.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.conn.QueryRow(ctx, query, params...)
 	err := row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -402,7 +403,7 @@ func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, 
 		sql.Add(" OFFSET ").Param(q.Offset)
 	}
 	query, params := sql.Build()
-	rows, err := db.executor.QueryContext(ctx, query, params...)
+	rows, err := db.conn.Query(ctx, query, params...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
@@ -431,11 +432,11 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, e
 	return result[0], nil
 }
 
-func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
-	var result int
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
+	var result uint64
 	db := d.(*Db)
 	query := NewSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
-	row := db.executor.QueryRowContext(ctx, query)
+	row := db.conn.QueryRow(ctx, query)
 	err := row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -446,7 +447,7 @@ func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
 func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {
 	db := d.(*Db)
 	query := NewSql("TRUNCATE TABLE ", r.table).String()
-	_, err := db.executor.ExecContext(ctx, query)
+	err := db.conn.Exec(ctx, query)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}

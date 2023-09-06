@@ -17,8 +17,8 @@ type Repo[T any] interface {
 	Update(context.Context, Db, Filter, T) error
 	Delete(context.Context, Db, Filter) error
 	Exists(context.Context, Db, Filter) (bool, error)
-	Count(context.Context, Db, Filter) (int, error)
-	CountAll(context.Context, Db) (int, error)
+	Count(context.Context, Db, Filter) (uint64, error)
+	CountAll(context.Context, Db) (uint64, error)
 	Clear(context.Context, Db) error
 	Simple() SimpleRepo[T]
 }

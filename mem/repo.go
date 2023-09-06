@@ -8,7 +8,7 @@ import (
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/operations"
 	"github.com/shopspring/decimal"
-	"net"
+	"net/netip"
 	"reflect"
 	"sort"
 	"strings"
@@ -142,11 +142,11 @@ func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error 
 	return nil
 }
 
-func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, error) {
+func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64, error) {
 	db := d.(*Db)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	result := 0
+	var result uint64
 	for _, record := range db.data[r.collection] {
 		entity, err := r.load(record)
 		if err != nil {
@@ -420,15 +420,15 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 	case operations.IpWithin:
 		switch val := f.Value.(type) {
 		case string:
-			_, network, err := net.ParseCIDR(val)
+			prefix, err := netip.ParsePrefix(val)
 			if err != nil {
 				return false, err
 			}
-			ip := net.ParseIP(field.String())
-			if ip == nil {
-				return false, fmt.Errorf("%s is not a valid IP address", field.String())
+			addr, ok := field.Interface().(netip.Addr)
+			if !ok {
+				return false, fmt.Errorf("%s is not netip.Addr", f.Field)
 			}
-			return network.Contains(ip), nil
+			return prefix.Contains(addr), nil
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
@@ -538,11 +538,11 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	return nil
 }
 
-func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
 	db := d.(*Db)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
-	return len(db.data[r.collection]), nil
+	return uint64(len(db.data[r.collection])), nil
 }
 
 func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {

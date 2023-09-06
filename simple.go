@@ -46,11 +46,11 @@ func (r *SimpleRepo[T]) Exists(db SimpleDb, f Filter) (bool, error) {
 	return r.repo.Exists(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) Count(db SimpleDb, f Filter) (int, error) {
+func (r *SimpleRepo[T]) Count(db SimpleDb, f Filter) (uint64, error) {
 	return r.repo.Count(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) CountAll(db SimpleDb) (int, error) {
+func (r *SimpleRepo[T]) CountAll(db SimpleDb) (uint64, error) {
 	return r.repo.CountAll(context.Background(), db.db)
 }
 

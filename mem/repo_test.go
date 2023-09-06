@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/meowmeowcode/hohin"
 	"github.com/shopspring/decimal"
+	"net/netip"
 	"testing"
 	"time"
 )
@@ -16,7 +17,7 @@ type User struct {
 	Active       bool
 	Weight       float64
 	Money        decimal.Decimal
-	IpAddress    string
+	IpAddress    netip.Addr
 	RegisteredAt time.Time
 }
 
@@ -65,7 +66,7 @@ func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Active:       true,
 		Weight:       60.5,
 		Money:        money,
-		IpAddress:    "192.168.1.1",
+		IpAddress:    netip.MustParseAddr("192.168.1.1"),
 		RegisteredAt: time.Date(2009, time.November, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -86,7 +87,7 @@ func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Active:       true,
 		Weight:       75.6,
 		Money:        money,
-		IpAddress:    "192.168.1.2",
+		IpAddress:    netip.MustParseAddr("192.168.1.2"),
 		RegisteredAt: time.Date(2009, time.December, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {
@@ -106,7 +107,7 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 		Age:          36,
 		Weight:       75.7,
 		Money:        money,
-		IpAddress:    "192.168.2.1",
+		IpAddress:    netip.MustParseAddr("192.168.2.1"),
 		RegisteredAt: time.Date(2009, time.October, 10, 23, 0, 0, 0, time.UTC),
 	}
 	if err := repo.Add(db, u); err != nil {

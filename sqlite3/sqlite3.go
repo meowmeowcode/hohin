@@ -367,8 +367,8 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	return nil
 }
 
-func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, error) {
-	var result int
+func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64, error) {
+	var result uint64
 	db := d.(*Db)
 	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
@@ -440,8 +440,8 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, e
 	return result[0], nil
 }
 
-func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
-	var result int
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
+	var result uint64
 	db := d.(*Db)
 	query := NewSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
 	row := db.executor.QueryRowContext(ctx, query)

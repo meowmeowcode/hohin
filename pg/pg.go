@@ -2,21 +2,24 @@ package pg
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/meowmeowcode/hohin"
 	"github.com/meowmeowcode/hohin/maps"
 	"github.com/meowmeowcode/hohin/operations"
 	"github.com/meowmeowcode/hohin/sqldb"
 	"reflect"
+	"strings"
 )
 
 type Executor interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+	Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, query string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, query string, args ...any) pgx.Row
+	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
 }
 
 type Db struct {
@@ -28,38 +31,38 @@ func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db)
 }
 
 func (db *Db) Tx(ctx context.Context, level hohin.IsolationLevel, f func(context.Context, hohin.Db) error) error {
-	executor, ok := db.executor.(*sql.DB)
+	executor, ok := db.executor.(*pgxpool.Pool)
 	if !ok {
 		panic("nested transactions are not supported")
 	}
-	txOptions := sql.TxOptions{}
+	txOptions := pgx.TxOptions{}
 	switch level {
 	case hohin.ReadUncommitted:
-		txOptions.Isolation = sql.LevelReadUncommitted
+		txOptions.IsoLevel = pgx.ReadUncommitted
 	case hohin.ReadCommitted:
-		txOptions.Isolation = sql.LevelReadCommitted
+		txOptions.IsoLevel = pgx.ReadCommitted
 	case hohin.RepeatableRead:
-		txOptions.Isolation = sql.LevelRepeatableRead
+		txOptions.IsoLevel = pgx.RepeatableRead
 	case hohin.Serializable:
-		txOptions.Isolation = sql.LevelSerializable
+		txOptions.IsoLevel = pgx.Serializable
 	}
-	tx, err := executor.BeginTx(ctx, &txOptions)
+	tx, err := executor.BeginTx(ctx, txOptions)
 	if err != nil {
 		return err
 	}
 	err = f(ctx, &Db{executor: tx})
 	if err != nil {
-		tx.Rollback()
+		tx.Rollback(ctx)
 		return err
 	}
-	return tx.Commit()
+	return tx.Commit(ctx)
 }
 
 func (db *Db) Simple() hohin.SimpleDb {
 	return hohin.NewSimpleDb(db)
 }
 
-func NewDb(pool *sql.DB) *Db {
+func NewDb(pool *pgxpool.Pool) *Db {
 	return &Db{executor: pool}
 }
 
@@ -168,9 +171,9 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error
 		return zero, err
 	}
 	query, params := sqlBuilder.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.executor.QueryRow(ctx, query, params...)
 	entity, err := r.load(row)
-	if err == sql.ErrNoRows {
+	if err == pgx.ErrNoRows {
 		return zero, hohin.NotFound
 	}
 	if err != nil {
@@ -256,9 +259,9 @@ func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.Db, f hohin.Filter) 
 	}
 	sqlBuilder.Add(" FOR UPDATE")
 	query, params := sqlBuilder.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.executor.QueryRow(ctx, query, params...)
 	entity, err := r.load(row)
-	if err == sql.ErrNoRows {
+	if err == pgx.ErrNoRows {
 		return zero, hohin.NotFound
 	}
 	if err != nil {
@@ -274,7 +277,7 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 	r.applyFilter(sql, f)
 	sql.Add(")")
 	query, params := sql.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.executor.QueryRow(ctx, query, params...)
 	err := row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -287,7 +290,7 @@ func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error 
 	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
 	r.applyFilter(sql, f)
 	query, params := sql.Build()
-	_, err := db.executor.ExecContext(ctx, query, params...)
+	_, err := db.executor.Exec(ctx, query, params...)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
@@ -302,14 +305,14 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 	}
 	columns, values := maps.Split(data)
 	query, params := r.buildInsertQuery(columns, values)
-	_, err = db.executor.ExecContext(ctx, query, params...)
+	_, err = db.executor.Exec(ctx, query, params...)
 	if err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
 	if r.afterAdd != nil {
 		for _, sql := range r.afterAdd(entity) {
 			query, params := sql.Build()
-			if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
+			if _, err := db.executor.Exec(ctx, query, params...); err != nil {
 				return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 			}
 		}
@@ -331,34 +334,32 @@ func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
 		return nil
 	}
 	db := d.(*Db)
-	var data []map[string]any
+	var rows [][]any
+	var columns []string
 	for _, e := range entities {
-		d, err := r.dump(e)
+		data, err := r.dump(e)
 		if err != nil {
 			return err
 		}
-		data = append(data, d)
-	}
-	columns, values := maps.Split(data[0])
-	query, _ := r.buildInsertQuery(columns, values)
-	stmt, err := db.executor.PrepareContext(ctx, query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	for _, d := range data {
-		values := make([]any, 0, len(d))
+		if columns == nil {
+			columns, _ = maps.Split(data)
+		}
+		var row []any
 		for _, c := range columns {
-			_, p := dialect.ProcessParam(d[c], 0)
-			values = append(values, p)
+			row = append(row, data[c])
 		}
-		_, err = stmt.ExecContext(ctx, values...)
-		if err != nil {
-			panic(err)
-			return err
-		}
+		rows = append(rows, row)
 	}
-	return nil
+	for i, c := range columns {
+		columns[i] = strings.ToLower(c)
+	}
+	_, err := db.executor.CopyFrom(
+		ctx,
+		pgx.Identifier{r.table},
+		columns,
+		pgx.CopyFromRows(rows),
+	)
+	return err
 }
 
 func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity T) error {
@@ -374,13 +375,13 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	sql.RemoveLast().Add(" WHERE ")
 	r.applyFilter(sql, f)
 	query, params := sql.Build()
-	if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
+	if _, err := db.executor.Exec(ctx, query, params...); err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
 	if r.afterUpdate != nil {
 		for _, sql := range r.afterUpdate(entity) {
 			query, params := sql.Build()
-			if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
+			if _, err := db.executor.Exec(ctx, query, params...); err != nil {
 				return fmt.Errorf("cannot execute query `%s`: %w", query, err)
 			}
 		}
@@ -388,14 +389,14 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	return nil
 }
 
-func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (int, error) {
-	var result int
+func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64, error) {
+	var result uint64
 	db := d.(*Db)
 	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
 	sql.Add(") AS q")
 	query, params := sql.Build()
-	row := db.executor.QueryRowContext(ctx, query, params...)
+	row := db.executor.QueryRow(ctx, query, params...)
 	err := row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -431,7 +432,7 @@ func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, 
 		sql.Add(" OFFSET ").Param(q.Offset)
 	}
 	query, params := sql.Build()
-	rows, err := db.executor.QueryContext(ctx, query, params...)
+	rows, err := db.executor.Query(ctx, query, params...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
@@ -460,11 +461,11 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, e
 	return result[0], nil
 }
 
-func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
-	var result int
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
+	var result uint64
 	db := d.(*Db)
 	query := NewSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
-	row := db.executor.QueryRowContext(ctx, query)
+	row := db.executor.QueryRow(ctx, query)
 	err := row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -475,7 +476,7 @@ func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (int, error) {
 func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {
 	db := d.(*Db)
 	query := NewSql("DELETE FROM ", r.table).String()
-	_, err := db.executor.ExecContext(ctx, query)
+	_, err := db.executor.Exec(ctx, query)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
