@@ -10,70 +10,70 @@ func NewSimpleRepo[T any](r Repo[T]) SimpleRepo[T] {
 	return SimpleRepo[T]{repo: r}
 }
 
-func (r *SimpleRepo[T]) Get(db SimpleDb, f Filter) (T, error) {
+func (r *SimpleRepo[T]) Get(db SimpleDB, f Filter) (T, error) {
 	return r.repo.Get(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) GetForUpdate(db SimpleDb, f Filter) (T, error) {
+func (r *SimpleRepo[T]) GetForUpdate(db SimpleDB, f Filter) (T, error) {
 	return r.repo.GetForUpdate(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) GetMany(db SimpleDb, q Query) ([]T, error) {
+func (r *SimpleRepo[T]) GetMany(db SimpleDB, q Query) ([]T, error) {
 	return r.repo.GetMany(context.Background(), db.db, q)
 }
 
-func (r *SimpleRepo[T]) GetFirst(db SimpleDb, q Query) (T, error) {
+func (r *SimpleRepo[T]) GetFirst(db SimpleDB, q Query) (T, error) {
 	return r.repo.GetFirst(context.Background(), db.db, q)
 }
 
-func (r *SimpleRepo[T]) Add(db SimpleDb, entity T) error {
+func (r *SimpleRepo[T]) Add(db SimpleDB, entity T) error {
 	return r.repo.Add(context.Background(), db.db, entity)
 }
 
-func (r *SimpleRepo[T]) AddMany(db SimpleDb, entities []T) error {
+func (r *SimpleRepo[T]) AddMany(db SimpleDB, entities []T) error {
 	return r.repo.AddMany(context.Background(), db.db, entities)
 }
 
-func (r *SimpleRepo[T]) Update(db SimpleDb, f Filter, entity T) error {
+func (r *SimpleRepo[T]) Update(db SimpleDB, f Filter, entity T) error {
 	return r.repo.Update(context.Background(), db.db, f, entity)
 }
 
-func (r *SimpleRepo[T]) Delete(db SimpleDb, f Filter) error {
+func (r *SimpleRepo[T]) Delete(db SimpleDB, f Filter) error {
 	return r.repo.Delete(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) Exists(db SimpleDb, f Filter) (bool, error) {
+func (r *SimpleRepo[T]) Exists(db SimpleDB, f Filter) (bool, error) {
 	return r.repo.Exists(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) Count(db SimpleDb, f Filter) (uint64, error) {
+func (r *SimpleRepo[T]) Count(db SimpleDB, f Filter) (uint64, error) {
 	return r.repo.Count(context.Background(), db.db, f)
 }
 
-func (r *SimpleRepo[T]) CountAll(db SimpleDb) (uint64, error) {
+func (r *SimpleRepo[T]) CountAll(db SimpleDB) (uint64, error) {
 	return r.repo.CountAll(context.Background(), db.db)
 }
 
-func (r *SimpleRepo[T]) Clear(db SimpleDb) error {
+func (r *SimpleRepo[T]) Clear(db SimpleDB) error {
 	return r.repo.Clear(context.Background(), db.db)
 }
 
-type SimpleDb struct {
-	db Db
+type SimpleDB struct {
+	db DB
 }
 
-func (d *SimpleDb) Transaction(f func(db SimpleDb) error) error {
-	return d.db.Transaction(context.Background(), func(_ context.Context, db Db) error {
+func (d *SimpleDB) Transaction(f func(db SimpleDB) error) error {
+	return d.db.Transaction(context.Background(), func(_ context.Context, db DB) error {
 		return f(db.Simple())
 	})
 }
 
-func (d *SimpleDb) Tx(l IsolationLevel, f func(db SimpleDb) error) error {
-	return d.db.Tx(context.Background(), l, func(_ context.Context, db Db) error {
+func (d *SimpleDB) Tx(l IsolationLevel, f func(db SimpleDB) error) error {
+	return d.db.Tx(context.Background(), l, func(_ context.Context, db DB) error {
 		return f(db.Simple())
 	})
 }
 
-func NewSimpleDb(db Db) SimpleDb {
-	return SimpleDb{db: db}
+func NewSimpleDB(db DB) SimpleDB {
+	return SimpleDB{db: db}
 }

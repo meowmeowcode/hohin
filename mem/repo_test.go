@@ -46,15 +46,15 @@ func usersEqual(u, u2 []User) bool {
 	return true
 }
 
-func makeDb() hohin.SimpleDb {
-	return NewDb().Simple()
+func makeDB() hohin.SimpleDB {
+	return NewDB().Simple()
 }
 
 func makeRepo() hohin.SimpleRepo[User] {
 	return NewRepo[User]("users").Simple()
 }
 
-func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
+func addAlice(db hohin.SimpleDB, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("120.50")
 	if err != nil {
 		panic(err)
@@ -75,7 +75,7 @@ func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	return u
 }
 
-func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
+func addBob(db hohin.SimpleDB, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("136.02")
 	if err != nil {
 		panic(err)
@@ -96,7 +96,7 @@ func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	return u
 }
 
-func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
+func addEve(db hohin.SimpleDB, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("168.31")
 	if err != nil {
 		panic(err)
@@ -117,16 +117,16 @@ func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 }
 
 func TestRepo(t *testing.T) {
-	db := NewDb().Simple()
+	db := NewDB().Simple()
 
-	cleanDb := func() {
-		db = NewDb().Simple()
+	cleanDB := func() {
+		db = NewDB().Simple()
 	}
 
 	repo := NewRepo[User]("users").Simple()
 
 	t.Run("TestAdd", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := User{Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)}
 		if err := repo.Add(db, alice); err != nil {
 			t.Fatal(err)
@@ -141,7 +141,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestAddMany", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		users := []User{
 			User{Id: uuid.New(), Name: "Alice", RegisteredAt: time.Now().UTC().Round(time.Second)},
 			User{Id: uuid.New(), Name: "Bob", RegisteredAt: time.Now().UTC().Round(time.Second)},
@@ -159,7 +159,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestGet", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		u, err := repo.Get(db, hohin.Eq("Name", "Alice"))
@@ -183,7 +183,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestGetForUpdate", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		u, err := repo.GetForUpdate(db, hohin.Eq("Name", "Alice"))
@@ -207,7 +207,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestExists", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -238,7 +238,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestUpdate", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		bob.Name = "Robert"
@@ -262,7 +262,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestDelete", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		exists, err := repo.Exists(db, hohin.Eq("Name", "Alice"))
 		if err != nil {
@@ -281,7 +281,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestCount", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -295,7 +295,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestLimit", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		addEve(db, repo)
@@ -310,7 +310,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestOffset", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		bob := addBob(db, repo)
 		eve := addEve(db, repo)
@@ -325,7 +325,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestOrder", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		eve := addEve(db, repo)
@@ -350,7 +350,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestFilters", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		eve := addEve(db, repo)
@@ -551,11 +551,11 @@ func TestRepo(t *testing.T) {
 			},
 			// Network operations:
 			{
-				filter: hohin.IpWithin("IpAddress", "192.168.1.0/24"),
+				filter: hohin.IPWithin("IpAddress", "192.168.1.0/24"),
 				result: []User{alice, bob},
 			},
 			{
-				filter: hohin.IpWithin("IpAddress", "192.168.2.0/24"),
+				filter: hohin.IPWithin("IpAddress", "192.168.2.0/24"),
 				result: []User{eve},
 			},
 			// Not, And, Or:
@@ -584,7 +584,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestGetFirst", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		eve := addEve(db, repo)
@@ -602,7 +602,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestUnknownField", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		_, err := repo.Get(db, hohin.Eq("Test", "something"))
 		if err == nil {
@@ -614,7 +614,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestCountAll", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -628,7 +628,7 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestClear", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -645,11 +645,11 @@ func TestRepo(t *testing.T) {
 	})
 
 	t.Run("TestTransaction", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		bob := addBob(db, repo)
 		addEve(db, repo)
-		err := db.Transaction(func(db hohin.SimpleDb) error {
+		err := db.Transaction(func(db hohin.SimpleDB) error {
 			repo.Delete(db, hohin.Eq("Id", bob.Id))
 			return errors.New("fail")
 		})
@@ -663,7 +663,7 @@ func TestRepo(t *testing.T) {
 		if !exists {
 			t.Fatal("Transaction wasn't rolled back")
 		}
-		err = db.Transaction(func(db hohin.SimpleDb) error {
+		err = db.Transaction(func(db hohin.SimpleDB) error {
 			repo.Delete(db, hohin.Eq("Id", bob.Id))
 			return nil
 		})

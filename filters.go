@@ -72,8 +72,8 @@ func IHasSuffix(field string, value string) Filter {
 	return Filter{Field: field, Operation: operations.IHasSuffix, Value: value}
 }
 
-func IpWithin(field string, value string) Filter {
-	return Filter{Field: field, Operation: operations.IpWithin, Value: value}
+func IPWithin(field string, value string) Filter {
+	return Filter{Field: field, Operation: operations.IPWithin, Value: value}
 }
 
 func And(value ...Filter) Filter {

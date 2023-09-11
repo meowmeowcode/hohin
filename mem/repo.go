@@ -16,12 +16,12 @@ import (
 	"time"
 )
 
-type Db struct {
+type DB struct {
 	data  map[string][][]byte
 	mutex sync.RWMutex
 }
 
-func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db) error) error {
+func (db *DB) Transaction(ctx context.Context, f func(context.Context, hohin.DB) error) error {
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	t := db.copy()
@@ -33,16 +33,16 @@ func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db)
 	return nil
 }
 
-func (db *Db) Tx(ctx context.Context, _ hohin.IsolationLevel, f func(context.Context, hohin.Db) error) error {
+func (db *DB) Tx(ctx context.Context, _ hohin.IsolationLevel, f func(context.Context, hohin.DB) error) error {
 	return db.Transaction(ctx, f)
 }
 
-func (db *Db) Simple() hohin.SimpleDb {
-	return hohin.NewSimpleDb(db)
+func (db *DB) Simple() hohin.SimpleDB {
+	return hohin.NewSimpleDB(db)
 }
 
-func (db *Db) copy() *Db {
-	c := NewDb()
+func (db *DB) copy() *DB {
+	c := NewDB()
 	for k, v := range db.data {
 		c.data[k] = make([][]byte, 0)
 		for _, record := range v {
@@ -52,8 +52,8 @@ func (db *Db) copy() *Db {
 	return c
 }
 
-func NewDb() *Db {
-	return &Db{data: make(map[string][][]byte)}
+func NewDB() *DB {
+	return &DB{data: make(map[string][][]byte)}
 }
 
 type Repo[T any] struct {
@@ -68,9 +68,9 @@ func (r *Repo[T]) Simple() hohin.SimpleRepo[T] {
 	return hohin.NewSimpleRepo[T](r)
 }
 
-func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
+func (r *Repo[T]) Get(ctx context.Context, d hohin.DB, f hohin.Filter) (T, error) {
 	var zero T
-	db := d.(*Db)
+	db := d.(*DB)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 	for _, record := range db.data[r.collection] {
@@ -89,12 +89,12 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error
 	return zero, hohin.NotFound
 }
 
-func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
+func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.DB, f hohin.Filter) (T, error) {
 	return r.Get(ctx, d, f)
 }
 
-func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool, error) {
-	db := d.(*Db)
+func (r *Repo[T]) Exists(ctx context.Context, d hohin.DB, f hohin.Filter) (bool, error) {
+	db := d.(*DB)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 	for _, record := range db.data[r.collection] {
@@ -113,8 +113,8 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 	return false, nil
 }
 
-func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error {
-	db := d.(*Db)
+func (r *Repo[T]) Delete(ctx context.Context, d hohin.DB, f hohin.Filter) error {
+	db := d.(*DB)
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	indices := make([]int, 0)
@@ -142,8 +142,8 @@ func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error 
 	return nil
 }
 
-func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64, error) {
-	db := d.(*Db)
+func (r Repo[T]) Count(ctx context.Context, d hohin.DB, f hohin.Filter) (uint64, error) {
+	db := d.(*DB)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 	var result uint64
@@ -163,8 +163,8 @@ func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64,
 	return result, nil
 }
 
-func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, error) {
-	db := d.(*Db)
+func (r *Repo[T]) GetMany(ctx context.Context, d hohin.DB, q hohin.Query) ([]T, error) {
+	db := d.(*DB)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 	result := []T{}
@@ -417,7 +417,7 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		default:
 			return false, fmt.Errorf("operation %s is not supported for %T", f.Operation, val)
 		}
-	case operations.IpWithin:
+	case operations.IPWithin:
 		switch val := f.Value.(type) {
 		case string:
 			prefix, err := netip.ParsePrefix(val)
@@ -472,7 +472,7 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 	panic(fmt.Sprintf("unknown operation %s", f.Operation))
 }
 
-func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, error) {
+func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.DB, q hohin.Query) (T, error) {
 	q.Limit = 1
 	var zero T
 	result, err := r.GetMany(ctx, d, q)
@@ -485,8 +485,8 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, e
 	return result[0], nil
 }
 
-func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
-	db := d.(*Db)
+func (r *Repo[T]) Add(ctx context.Context, d hohin.DB, entity T) error {
+	db := d.(*DB)
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	records := db.data[r.collection]
@@ -498,7 +498,7 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
 	return nil
 }
 
-func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
+func (r *Repo[T]) AddMany(ctx context.Context, d hohin.DB, entities []T) error {
 	for _, e := range entities {
 		if err := r.Add(ctx, d, e); err != nil {
 			return err
@@ -507,8 +507,8 @@ func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
 	return nil
 }
 
-func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity T) error {
-	db := d.(*Db)
+func (r *Repo[T]) Update(ctx context.Context, d hohin.DB, f hohin.Filter, entity T) error {
+	db := d.(*DB)
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	index := -1
@@ -538,15 +538,15 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	return nil
 }
 
-func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
-	db := d.(*Db)
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.DB) (uint64, error) {
+	db := d.(*DB)
 	db.mutex.RLock()
 	defer db.mutex.RUnlock()
 	return uint64(len(db.data[r.collection])), nil
 }
 
-func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {
-	db := d.(*Db)
+func (r *Repo[T]) Clear(ctx context.Context, d hohin.DB) error {
+	db := d.(*DB)
 	db.mutex.Lock()
 	defer db.mutex.Unlock()
 	db.data[r.collection] = nil

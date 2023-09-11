@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS emails (
 		}
 	}()
 
-	cleanDb := func() {
+	cleanDB := func() {
 		if _, err := pool.Exec(ctx, `DELETE FROM contacts`); err != nil {
 			panic(err)
 		}
@@ -107,11 +107,11 @@ CREATE TABLE IF NOT EXISTS emails (
 		}
 	}
 
-	db := NewDb(pool).Simple()
+	db := NewDB(pool).Simple()
 	repo := makeContactsRepo()
 
 	t.Run("TestOneToMany", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		bob := Contact{Pk: uuid.New(), Name: "Bob", Emails: []string{"bob@test.com", "bob123@test.com"}}
 		err := repo.Add(db, bob)
 		if err != nil {

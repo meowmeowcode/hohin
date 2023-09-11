@@ -52,7 +52,7 @@ func usersEqual(u, u2 []User) bool {
 	return true
 }
 
-func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
+func addAlice(db hohin.SimpleDB, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("120.50")
 	if err != nil {
 		panic(err)
@@ -73,7 +73,7 @@ func addAlice(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	return u
 }
 
-func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
+func addBob(db hohin.SimpleDB, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("136.02")
 	if err != nil {
 		panic(err)
@@ -94,7 +94,7 @@ func addBob(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
 	return u
 }
 
-func addEve(db hohin.SimpleDb, repo hohin.SimpleRepo[User]) User {
+func addEve(db hohin.SimpleDB, repo hohin.SimpleRepo[User]) User {
 	money, err := decimal.NewFromString("168.31")
 	if err != nil {
 		panic(err)
@@ -142,17 +142,17 @@ CREATE TABLE users (
 		panic(err)
 	}
 
-	cleanDb := func() {
+	cleanDB := func() {
 		if _, err = pool.Exec(ctx, `DELETE FROM users`); err != nil {
 			panic(err)
 		}
 	}
 
-	db := NewDb(pool).Simple()
+	db := NewDB(pool).Simple()
 	repo := NewRepo(Conf[User]{Table: "users"}).Simple()
 
 	t.Run("TestAdd", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := User{
 			Name:         "Alice",
 			RegisteredAt: time.Now().UTC().Round(time.Second),
@@ -171,7 +171,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestAddMany", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		users := []User{
 			User{
 				Id:           uuid.New(),
@@ -199,7 +199,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestGet", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		u, err := repo.Get(db, hohin.Eq("Name", "Alice"))
@@ -223,7 +223,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestGetForUpdate", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		u, err := repo.GetForUpdate(db, hohin.Eq("Name", "Alice"))
@@ -247,7 +247,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestExists", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -278,7 +278,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestUpdate", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		bob.Name = "Robert"
@@ -302,7 +302,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestDelete", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		exists, err := repo.Exists(db, hohin.Eq("Name", "Alice"))
 		if err != nil {
@@ -321,7 +321,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestCount", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -335,7 +335,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestLimit", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		addEve(db, repo)
@@ -350,7 +350,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestOffset", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		bob := addBob(db, repo)
 		eve := addEve(db, repo)
@@ -365,7 +365,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestOrder", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		eve := addEve(db, repo)
@@ -390,7 +390,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestFilters", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		alice := addAlice(db, repo)
 		bob := addBob(db, repo)
 		eve := addEve(db, repo)
@@ -591,11 +591,11 @@ CREATE TABLE users (
 			},
 			// Network operations:
 			{
-				filter: hohin.IpWithin("IpAddress", "192.168.1.0/24"),
+				filter: hohin.IPWithin("IpAddress", "192.168.1.0/24"),
 				result: []User{alice, bob},
 			},
 			{
-				filter: hohin.IpWithin("IpAddress", "192.168.2.0/24"),
+				filter: hohin.IPWithin("IpAddress", "192.168.2.0/24"),
 				result: []User{eve},
 			},
 			// Not, And, Or:
@@ -624,7 +624,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestGetFirst", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		eve := addEve(db, repo)
@@ -642,7 +642,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestUnknownField", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		_, err := repo.Get(db, hohin.Eq("Test", "something"))
 		if err == nil {
 			t.Fatalf("err is nil")
@@ -653,7 +653,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestCountAll", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -667,7 +667,7 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestClear", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		addBob(db, repo)
 		addEve(db, repo)
@@ -684,11 +684,11 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestTransaction", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		bob := addBob(db, repo)
 		addEve(db, repo)
-		err := db.Transaction(func(db hohin.SimpleDb) error {
+		err := db.Transaction(func(db hohin.SimpleDB) error {
 			repo.Delete(db, hohin.Eq("Id", bob.Id))
 			return errors.New("fail")
 		})
@@ -702,7 +702,7 @@ CREATE TABLE users (
 		if !exists {
 			t.Fatal("Transaction wasn't rolled back")
 		}
-		err = db.Transaction(func(db hohin.SimpleDb) error {
+		err = db.Transaction(func(db hohin.SimpleDB) error {
 			repo.Delete(db, hohin.Eq("Id", bob.Id))
 			return nil
 		})
@@ -719,11 +719,11 @@ CREATE TABLE users (
 	})
 
 	t.Run("TestTx", func(t *testing.T) {
-		cleanDb()
+		cleanDB()
 		addAlice(db, repo)
 		bob := addBob(db, repo)
 		addEve(db, repo)
-		err := db.Tx(hohin.RepeatableRead, func(db hohin.SimpleDb) error {
+		err := db.Tx(hohin.RepeatableRead, func(db hohin.SimpleDB) error {
 			repo.Delete(db, hohin.Eq("Id", bob.Id))
 			return errors.New("fail")
 		})
@@ -737,7 +737,7 @@ CREATE TABLE users (
 		if !exists {
 			t.Fatal("Transaction wasn't rolled back")
 		}
-		err = db.Tx(hohin.RepeatableRead, func(db hohin.SimpleDb) error {
+		err = db.Tx(hohin.RepeatableRead, func(db hohin.SimpleDB) error {
 			repo.Delete(db, hohin.Eq("Id", bob.Id))
 			return nil
 		})

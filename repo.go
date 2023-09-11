@@ -8,23 +8,23 @@ import (
 var NotFound error = errors.New("object not found")
 
 type Repo[T any] interface {
-	Get(context.Context, Db, Filter) (T, error)
-	GetForUpdate(context.Context, Db, Filter) (T, error)
-	GetMany(context.Context, Db, Query) ([]T, error)
-	GetFirst(context.Context, Db, Query) (T, error)
-	Add(context.Context, Db, T) error
-	AddMany(context.Context, Db, []T) error
-	Update(context.Context, Db, Filter, T) error
-	Delete(context.Context, Db, Filter) error
-	Exists(context.Context, Db, Filter) (bool, error)
-	Count(context.Context, Db, Filter) (uint64, error)
-	CountAll(context.Context, Db) (uint64, error)
-	Clear(context.Context, Db) error
+	Get(context.Context, DB, Filter) (T, error)
+	GetForUpdate(context.Context, DB, Filter) (T, error)
+	GetMany(context.Context, DB, Query) ([]T, error)
+	GetFirst(context.Context, DB, Query) (T, error)
+	Add(context.Context, DB, T) error
+	AddMany(context.Context, DB, []T) error
+	Update(context.Context, DB, Filter, T) error
+	Delete(context.Context, DB, Filter) error
+	Exists(context.Context, DB, Filter) (bool, error)
+	Count(context.Context, DB, Filter) (uint64, error)
+	CountAll(context.Context, DB) (uint64, error)
+	Clear(context.Context, DB) error
 	Simple() SimpleRepo[T]
 }
 
-type Db interface {
-	Transaction(context.Context, func(context.Context, Db) error) error
-	Tx(context.Context, IsolationLevel, func(context.Context, Db) error) error
-	Simple() SimpleDb
+type DB interface {
+	Transaction(context.Context, func(context.Context, DB) error) error
+	Tx(context.Context, IsolationLevel, func(context.Context, DB) error) error
+	Simple() SimpleDB
 }

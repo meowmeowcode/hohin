@@ -19,15 +19,15 @@ type Executor interface {
 	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }
 
-type Db struct {
+type DB struct {
 	executor Executor
 }
 
-func (db *Db) Transaction(ctx context.Context, f func(context.Context, hohin.Db) error) error {
+func (db *DB) Transaction(ctx context.Context, f func(context.Context, hohin.DB) error) error {
 	return db.Tx(ctx, hohin.DefaultIsolation, f)
 }
 
-func (db *Db) Tx(ctx context.Context, level hohin.IsolationLevel, f func(context.Context, hohin.Db) error) error {
+func (db *DB) Tx(ctx context.Context, level hohin.IsolationLevel, f func(context.Context, hohin.DB) error) error {
 	executor, ok := db.executor.(*sql.DB)
 	if !ok {
 		panic("nested transactions are not supported")
@@ -47,7 +47,7 @@ func (db *Db) Tx(ctx context.Context, level hohin.IsolationLevel, f func(context
 	if err != nil {
 		return err
 	}
-	err = f(ctx, &Db{executor: tx})
+	err = f(ctx, &DB{executor: tx})
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -55,12 +55,12 @@ func (db *Db) Tx(ctx context.Context, level hohin.IsolationLevel, f func(context
 	return tx.Commit()
 }
 
-func (db *Db) Simple() hohin.SimpleDb {
-	return hohin.NewSimpleDb(db)
+func (db *DB) Simple() hohin.SimpleDB {
+	return hohin.NewSimpleDB(db)
 }
 
-func NewDb(pool *sql.DB) *Db {
-	return &Db{executor: pool}
+func NewDB(pool *sql.DB) *DB {
+	return &DB{executor: pool}
 }
 
 type Scanner interface {
@@ -157,12 +157,12 @@ func (r *Repo[T]) Simple() hohin.SimpleRepo[T] {
 	return hohin.NewSimpleRepo[T](r)
 }
 
-func (r *Repo[T]) Get(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
+func (r *Repo[T]) Get(ctx context.Context, d hohin.DB, f hohin.Filter) (T, error) {
 	var zero T
 	if r.load == nil {
 		return zero, errors.New("repository isn't configured to load entities")
 	}
-	db := d.(*Db)
+	db := d.(*DB)
 	sqlBuilder := NewSql(r.query, " WHERE ")
 	if err := r.applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
@@ -242,13 +242,13 @@ func (r *Repo[T]) applyFilter(s *sqldb.Sql, f hohin.Filter) error {
 	return nil
 }
 
-func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.Db, f hohin.Filter) (T, error) {
+func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.DB, f hohin.Filter) (T, error) {
 	return r.Get(ctx, d, f)
 }
 
-func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool, error) {
+func (r *Repo[T]) Exists(ctx context.Context, d hohin.DB, f hohin.Filter) (bool, error) {
 	var result bool
-	db := d.(*Db)
+	db := d.(*DB)
 	sql := NewSql("SELECT EXISTS (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
 	sql.Add(")")
@@ -261,8 +261,8 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.Db, f hohin.Filter) (bool,
 	return result, err
 }
 
-func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error {
-	db := d.(*Db)
+func (r *Repo[T]) Delete(ctx context.Context, d hohin.DB, f hohin.Filter) error {
+	db := d.(*DB)
 	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
 	r.applyFilter(sql, f)
 	query, params := sql.Build()
@@ -273,8 +273,8 @@ func (r *Repo[T]) Delete(ctx context.Context, d hohin.Db, f hohin.Filter) error 
 	return err
 }
 
-func (r *Repo[T]) Add(ctx context.Context, d hohin.Db, entity T) error {
-	db := d.(*Db)
+func (r *Repo[T]) Add(ctx context.Context, d hohin.DB, entity T) error {
+	db := d.(*DB)
 	data, err := r.dump(entity)
 	if err != nil {
 		return err
@@ -305,11 +305,11 @@ func (r *Repo[T]) buildInsertQuery(columns []string, values []any) (string, []an
 		Build()
 }
 
-func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
+func (r *Repo[T]) AddMany(ctx context.Context, d hohin.DB, entities []T) error {
 	if len(entities) == 0 {
 		return nil
 	}
-	db := d.(*Db)
+	db := d.(*DB)
 	var data []map[string]any
 	for _, e := range entities {
 		d, err := r.dump(e)
@@ -340,8 +340,8 @@ func (r *Repo[T]) AddMany(ctx context.Context, d hohin.Db, entities []T) error {
 	return nil
 }
 
-func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity T) error {
-	db := d.(*Db)
+func (r *Repo[T]) Update(ctx context.Context, d hohin.DB, f hohin.Filter, entity T) error {
+	db := d.(*DB)
 	data, err := r.dump(entity)
 	if err != nil {
 		return err
@@ -367,9 +367,9 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.Db, f hohin.Filter, entity
 	return nil
 }
 
-func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64, error) {
+func (r Repo[T]) Count(ctx context.Context, d hohin.DB, f hohin.Filter) (uint64, error) {
 	var result uint64
-	db := d.(*Db)
+	db := d.(*DB)
 	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
 	sql.Add(") AS q")
@@ -382,8 +382,8 @@ func (r Repo[T]) Count(ctx context.Context, d hohin.Db, f hohin.Filter) (uint64,
 	return result, err
 }
 
-func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, error) {
-	db := d.(*Db)
+func (r *Repo[T]) GetMany(ctx context.Context, d hohin.DB, q hohin.Query) ([]T, error) {
+	db := d.(*DB)
 	result := make([]T, 0)
 	sql := NewSql(r.query)
 	if q.Filter.Operation != "" {
@@ -427,7 +427,7 @@ func (r *Repo[T]) GetMany(ctx context.Context, d hohin.Db, q hohin.Query) ([]T, 
 	return result, nil
 }
 
-func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, error) {
+func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.DB, q hohin.Query) (T, error) {
 	q.Limit = 1
 	var zero T
 	result, err := r.GetMany(ctx, d, q)
@@ -440,9 +440,9 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.Db, q hohin.Query) (T, e
 	return result[0], nil
 }
 
-func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
+func (r *Repo[T]) CountAll(ctx context.Context, d hohin.DB) (uint64, error) {
 	var result uint64
-	db := d.(*Db)
+	db := d.(*DB)
 	query := NewSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
 	row := db.executor.QueryRowContext(ctx, query)
 	err := row.Scan(&result)
@@ -452,8 +452,8 @@ func (r *Repo[T]) CountAll(ctx context.Context, d hohin.Db) (uint64, error) {
 	return result, err
 }
 
-func (r *Repo[T]) Clear(ctx context.Context, d hohin.Db) error {
-	db := d.(*Db)
+func (r *Repo[T]) Clear(ctx context.Context, d hohin.DB) error {
+	db := d.(*DB)
 	query := NewSql("DELETE FROM ", r.table).String()
 	_, err := db.executor.ExecContext(ctx, query)
 	if err != nil {
