@@ -2,14 +2,15 @@ package mysql
 
 import "github.com/meowmeowcode/hohin/sqldb"
 
-type Dialect struct{}
+type mySQLDialect struct{}
 
-var dialect Dialect
+var dialect mySQLDialect
 
-func (d Dialect) ProcessParam(p any, number int) (string, any) {
+func (d mySQLDialect) ProcessParam(p any, number int) (string, any) {
 	return "?", p
 }
 
-func NewSql(strs ...string) *sqldb.Sql {
-	return sqldb.NewSql(dialect, strs...)
+// NewSQL creates a new SQL builder for MySQL.
+func NewSQL(strs ...string) *sqldb.SQL {
+	return sqldb.NewSQL(dialect, strs...)
 }

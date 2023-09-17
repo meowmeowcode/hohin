@@ -1,3 +1,4 @@
+// Package mem contains in-memory implementations of hohin interfaces.
 package mem
 
 import (
@@ -16,6 +17,7 @@ import (
 	"time"
 )
 
+// DB implements hohin.DB for an in-memory data structure.
 type DB struct {
 	data  map[string][][]byte
 	mutex sync.RWMutex
@@ -52,14 +54,17 @@ func (db *DB) copy() *DB {
 	return c
 }
 
+// NewDB creates a [DB].
 func NewDB() *DB {
 	return &DB{data: make(map[string][][]byte)}
 }
 
+// Repo implements hohin.Repo for an in-memory data structure.
 type Repo[T any] struct {
 	collection string
 }
 
+// NewRepo creates a [Repo].
 func NewRepo[T any](collection string) *Repo[T] {
 	return &Repo[T]{collection: collection}
 }

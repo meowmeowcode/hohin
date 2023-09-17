@@ -4,14 +4,15 @@ import (
 	"github.com/meowmeowcode/hohin/sqldb"
 )
 
-type Dialect struct{}
+type clickHouseDialect struct{}
 
-func (d Dialect) ProcessParam(p any, number int) (string, any) {
+func (d clickHouseDialect) ProcessParam(p any, number int) (string, any) {
 	return "?", p
 }
 
-var dialect Dialect
+var dialect clickHouseDialect
 
-func NewSql(strs ...string) *sqldb.Sql {
-	return sqldb.NewSql(dialect, strs...)
+// NewSQL creates a new SQL builder for ClickHouse.
+func NewSQL(strs ...string) *sqldb.SQL {
+	return sqldb.NewSQL(dialect, strs...)
 }

@@ -1,3 +1,5 @@
+// Package pg contains implementations of hohin interfaces for PostgreSQL.
+// It uses the pgx driver.
 package pg
 
 import (
@@ -15,15 +17,16 @@ import (
 	"strings"
 )
 
-type Executor interface {
+type executor interface {
 	Exec(ctx context.Context, query string, args ...any) (pgconn.CommandTag, error)
 	Query(ctx context.Context, query string, args ...any) (pgx.Rows, error)
 	QueryRow(ctx context.Context, query string, args ...any) pgx.Row
 	CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error)
 }
 
+// DB implements hohin.DB for PostgreSQL.
 type DB struct {
-	executor Executor
+	executor executor
 }
 
 func (db *DB) Transaction(ctx context.Context, f func(context.Context, hohin.DB) error) error {
@@ -62,14 +65,17 @@ func (db *DB) Simple() hohin.SimpleDB {
 	return hohin.NewSimpleDB(db)
 }
 
+// NewDB creates a [DB].
 func NewDB(pool *pgxpool.Pool) *DB {
 	return &DB{executor: pool}
 }
 
+// Scanner allows to fetch data from a result of an SQL query.
 type Scanner interface {
 	Scan(dest ...any) error
 }
 
+// Implementation of hohin.Repo for PostgreSQL.
 type Repo[T any] struct {
 	table           string
 	mapping         map[string]string
@@ -79,20 +85,27 @@ type Repo[T any] struct {
 	queryCustomized bool
 	dump            func(T) (map[string]any, error)
 	load            func(Scanner) (T, error)
-	afterAdd        func(T) []*sqldb.Sql
-	afterUpdate     func(T) []*sqldb.Sql
+	afterAdd        func(T) []*sqldb.SQL
+	afterUpdate     func(T) []*sqldb.SQL
 }
 
+// Conf contains configuration of a [Repo].
 type Conf[T any] struct {
-	Table       string
-	Mapping     map[string]string
-	Query       string
-	Dump        func(T) (map[string]any, error)
-	Load        func(Scanner) (T, error)
-	AfterAdd    func(T) []*sqldb.Sql
-	AfterUpdate func(T) []*sqldb.Sql
+	Table   string            // name of a database table
+	Mapping map[string]string // mapping of entity fields to table columns
+	Query   string            // SQL query to select records from the database
+	// function that transforms an entity to a map where keys are
+	// column names of a database table and values are data for a row in that table
+	Dump func(T) (map[string]any, error)
+	// function that loads a result of an SQL query to an entity
+	Load func(Scanner) (T, error)
+	// function that builds and returns a sequence of SQL queries to execute after a call of [Repo.Add]
+	AfterAdd func(T) []*sqldb.SQL
+	// function that builds and returns a sequence of SQL queries to execute after a call of [Repo.Update]
+	AfterUpdate func(T) []*sqldb.SQL
 }
 
+// NewRepo creates a [Repo].
 func NewRepo[T any](conf Conf[T]) *Repo[T] {
 	if conf.Table == "" {
 		panic("table name is required to create a repository")
@@ -118,7 +131,7 @@ func NewRepo[T any](conf Conf[T]) *Repo[T] {
 	if conf.Query != "" {
 		r.query = conf.Query
 	} else {
-		r.query = NewSql("SELECT ").Join(", ", r.columns...).Add(" FROM ", r.table).String()
+		r.query = NewSQL("SELECT ").Join(", ", r.columns...).Add(" FROM ", r.table).String()
 	}
 
 	if conf.Dump != nil {
@@ -166,7 +179,7 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.DB, f hohin.Filter) (T, error
 		return zero, errors.New("repository isn't configured to load entities")
 	}
 	db := d.(*DB)
-	sqlBuilder := NewSql(r.query, " WHERE ")
+	sqlBuilder := NewSQL(r.query, " WHERE ")
 	if err := r.applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
 	}
@@ -182,7 +195,7 @@ func (r *Repo[T]) Get(ctx context.Context, d hohin.DB, f hohin.Filter) (T, error
 	return entity, nil
 }
 
-func (r *Repo[T]) applyFilter(s *sqldb.Sql, f hohin.Filter) error {
+func (r *Repo[T]) applyFilter(s *sqldb.SQL, f hohin.Filter) error {
 	col, ok := r.mapping[f.Field]
 	if len(f.Field) > 0 && !ok {
 		return fmt.Errorf("unknown field `%s` in a filter", f.Field)
@@ -253,7 +266,7 @@ func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.DB, f hohin.Filter) 
 		return zero, errors.New("repository isn't configured to load entities")
 	}
 	db := d.(*DB)
-	sqlBuilder := NewSql(r.query, " WHERE ")
+	sqlBuilder := NewSQL(r.query, " WHERE ")
 	if err := r.applyFilter(sqlBuilder, f); err != nil {
 		return zero, err
 	}
@@ -273,7 +286,7 @@ func (r *Repo[T]) GetForUpdate(ctx context.Context, d hohin.DB, f hohin.Filter) 
 func (r *Repo[T]) Exists(ctx context.Context, d hohin.DB, f hohin.Filter) (bool, error) {
 	var result bool
 	db := d.(*DB)
-	sql := NewSql("SELECT EXISTS (", r.query, " WHERE ")
+	sql := NewSQL("SELECT EXISTS (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
 	sql.Add(")")
 	query, params := sql.Build()
@@ -287,7 +300,7 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.DB, f hohin.Filter) (bool,
 
 func (r *Repo[T]) Delete(ctx context.Context, d hohin.DB, f hohin.Filter) error {
 	db := d.(*DB)
-	sql := NewSql("DELETE FROM ", r.table, " WHERE ")
+	sql := NewSQL("DELETE FROM ", r.table, " WHERE ")
 	r.applyFilter(sql, f)
 	query, params := sql.Build()
 	_, err := db.executor.Exec(ctx, query, params...)
@@ -321,7 +334,7 @@ func (r *Repo[T]) Add(ctx context.Context, d hohin.DB, entity T) error {
 }
 
 func (r *Repo[T]) buildInsertQuery(columns []string, values []any) (string, []any) {
-	return NewSql("INSERT INTO ", r.table, " (").
+	return NewSQL("INSERT INTO ", r.table, " (").
 		Join(", ", columns...).
 		Add(") VALUES (").
 		JoinParams(", ", values...).
@@ -368,7 +381,7 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.DB, f hohin.Filter, entity
 	if err != nil {
 		return err
 	}
-	sql := NewSql("UPDATE ", r.table, " SET ")
+	sql := NewSQL("UPDATE ", r.table, " SET ")
 	for k, v := range data {
 		sql.Add(k, " = ").Param(v).Add(", ")
 	}
@@ -392,7 +405,7 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.DB, f hohin.Filter, entity
 func (r Repo[T]) Count(ctx context.Context, d hohin.DB, f hohin.Filter) (uint64, error) {
 	var result uint64
 	db := d.(*DB)
-	sql := NewSql("SELECT COUNT(1) FROM (", r.query, " WHERE ")
+	sql := NewSQL("SELECT COUNT(1) FROM (", r.query, " WHERE ")
 	r.applyFilter(sql, f)
 	sql.Add(") AS q")
 	query, params := sql.Build()
@@ -407,7 +420,7 @@ func (r Repo[T]) Count(ctx context.Context, d hohin.DB, f hohin.Filter) (uint64,
 func (r *Repo[T]) GetMany(ctx context.Context, d hohin.DB, q hohin.Query) ([]T, error) {
 	db := d.(*DB)
 	result := make([]T, 0)
-	sql := NewSql(r.query)
+	sql := NewSQL(r.query)
 	if q.Filter.Operation != "" {
 		sql.Add(" WHERE ")
 		if err := r.applyFilter(sql, q.Filter); err != nil {
@@ -464,7 +477,7 @@ func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.DB, q hohin.Query) (T, e
 func (r *Repo[T]) CountAll(ctx context.Context, d hohin.DB) (uint64, error) {
 	var result uint64
 	db := d.(*DB)
-	query := NewSql("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
+	query := NewSQL("SELECT COUNT(1) FROM (", r.query, ") AS q").String()
 	row := db.executor.QueryRow(ctx, query)
 	err := row.Scan(&result)
 	if err != nil {
@@ -475,7 +488,7 @@ func (r *Repo[T]) CountAll(ctx context.Context, d hohin.DB) (uint64, error) {
 
 func (r *Repo[T]) Clear(ctx context.Context, d hohin.DB) error {
 	db := d.(*DB)
-	query := NewSql("DELETE FROM ", r.table).String()
+	query := NewSQL("DELETE FROM ", r.table).String()
 	_, err := db.executor.Exec(ctx, query)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)

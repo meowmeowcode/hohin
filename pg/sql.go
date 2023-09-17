@@ -6,17 +6,18 @@ import (
 	"net/netip"
 )
 
-type Dialect struct{}
+type pgDialect struct{}
 
-func (d Dialect) ProcessParam(p any, number int) (string, any) {
+func (d pgDialect) ProcessParam(p any, number int) (string, any) {
 	if val, ok := p.(netip.Addr); ok {
 		return fmt.Sprintf("$%d", number), val.String()
 	}
 	return fmt.Sprintf("$%d", number), p
 }
 
-var dialect Dialect
+var dialect pgDialect
 
-func NewSql(strs ...string) *sqldb.Sql {
-	return sqldb.NewSql(dialect, strs...)
+// NewSQL creates a new SQL builder for PostgreSQL.
+func NewSQL(strs ...string) *sqldb.SQL {
+	return sqldb.NewSQL(dialect, strs...)
 }

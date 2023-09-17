@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-type Dialect struct{}
+type sqlite3Dialect struct{}
 
-func (d Dialect) ProcessParam(p any, _ int) (string, any) {
+func (d sqlite3Dialect) ProcessParam(p any, _ int) (string, any) {
 	if param, ok := p.(time.Time); ok {
 		text, err := param.MarshalText()
 		if err != nil {
@@ -18,8 +18,9 @@ func (d Dialect) ProcessParam(p any, _ int) (string, any) {
 	return "?", p
 }
 
-var dialect Dialect
+var dialect sqlite3Dialect
 
-func NewSql(strs ...string) *sqldb.Sql {
-	return sqldb.NewSql(dialect, strs...)
+// NewSQL creates a new SQL builder for SQLite3.
+func NewSQL(strs ...string) *sqldb.SQL {
+	return sqldb.NewSQL(dialect, strs...)
 }
