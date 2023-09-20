@@ -6,6 +6,10 @@ Hohin is a database toolkit that contains generic implementations of the Reposit
 
 At the moment, ClickHouse, MySQL, PostgreSQL, and SQLite3 are supported.
 
+## Documentation
+
+https://pkg.go.dev/github.com/meowmeowcode/hohin
+
 ## Usage example
 
 ```go
