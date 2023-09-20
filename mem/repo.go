@@ -276,6 +276,8 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 	}
 
 	switch f.Operation {
+	case operations.IsNull:
+		return field.IsNil(), nil
 	case operations.Eq:
 		switch val := f.Value.(type) {
 		case int:
@@ -474,7 +476,7 @@ func (r *Repo[T]) matchesFilter(entity T, f hohin.Filter) (bool, error) {
 		}
 	}
 
-	panic(fmt.Sprintf("unknown operation %s", f.Operation))
+	return false, fmt.Errorf("unknown operation %s", f.Operation)
 }
 
 func (r *Repo[T]) GetFirst(ctx context.Context, d hohin.DB, q hohin.Query) (T, error) {

@@ -126,17 +126,17 @@ func TestRepo(t *testing.T) {
 	}
 
 	err = conn.Exec(ctx, `
-CREATE TABLE users (
-    Id UUID NOT NULL,
-    Name String NOT NULL,
-    Age UInt32 NOT NULL,
-    Active Boolean NOT NULL,
-    Weight Float64 NOT NULL,
-    Money Decimal(12, 2) NOT NULL,
-    IpAddress IPv4 NOT NULL,
-    RegisteredAt DateTime64 NOT NULL
-) ENGINE = MergeTree() ORDER BY RegisteredAt
-       `)
+		CREATE TABLE users (
+			Id UUID NOT NULL,
+			Name String NOT NULL,
+			Age UInt32 NOT NULL,
+			Active Boolean NOT NULL,
+			Weight Float64 NOT NULL,
+			Money Decimal(12, 2) NOT NULL,
+			IpAddress IPv4 NOT NULL,
+			RegisteredAt DateTime64 NOT NULL
+		) ENGINE = MergeTree() ORDER BY RegisteredAt
+	`)
 	if err != nil {
 		panic(err)
 	}
@@ -679,6 +679,46 @@ CREATE TABLE users (
 		}
 		if count != 0 {
 			t.Fatalf("%v != 0", count)
+		}
+	})
+
+	t.Run("NullTest", func(t *testing.T) {
+		err := conn.Exec(context.Background(), `DROP TABLE IF EXISTS options`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = conn.Exec(context.Background(), `
+			CREATE TABLE options (
+				Value Nullable(String),
+				CreatedAt DateTime64
+			) ENGINE = MergeTree() ORDER BY CreatedAt
+		`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		type Option struct {
+			Value     *string
+			CreatedAt time.Time
+		}
+		optionsRepo := NewRepo(Conf[Option]{Table: "options"}).Simple()
+
+		val := "test"
+		optionsRepo.Add(db, Option{Value: &val, CreatedAt: time.Now().UTC()})
+		optionsRepo.Add(db, Option{Value: &val, CreatedAt: time.Now().UTC()})
+		optionsRepo.Add(db, Option{CreatedAt: time.Now().UTC()})
+		count, err := optionsRepo.Count(db, hohin.IsNull("Value"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%v != 1", count)
+		}
+		count, err = optionsRepo.Count(db, hohin.Not(hohin.IsNull("Value")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 2 {
+			t.Fatalf("%v != 2", count)
 		}
 	})
 }

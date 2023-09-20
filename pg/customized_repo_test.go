@@ -28,11 +28,13 @@ func makeContactsRepo() hohin.SimpleRepo[Contact] {
 			"Name": "name",
 		},
 		Query: `
-SELECT * FROM (SELECT contacts.id, contacts.name, array_agg(emails.email) AS emails
-FROM contacts
-LEFT JOIN emails ON emails.contact_id = contacts.id
-GROUP BY contacts.id, contacts.name) AS query
-        `,
+			SELECT * FROM (
+				SELECT contacts.id, contacts.name, array_agg(emails.email) AS emails
+				FROM contacts
+				LEFT JOIN emails ON emails.contact_id = contacts.id
+				GROUP BY contacts.id, contacts.name
+			) AS query
+		`,
 		Load: func(row Scanner) (Contact, error) {
 			var entity Contact
 			err := row.Scan(&entity.Pk, &entity.Name, &entity.Emails)
@@ -71,11 +73,11 @@ func TestCustomizedRepo(t *testing.T) {
 	defer pool.Close()
 
 	_, err = pool.Exec(ctx, `
-CREATE TABLE IF NOT EXISTS contacts (
-    id uuid PRIMARY KEY,
-    name text NOT NULL
-)
-    `)
+		CREATE TABLE IF NOT EXISTS contacts (
+			id uuid PRIMARY KEY,
+			name text NOT NULL
+		)
+	`)
 	if err != nil {
 		panic(err)
 	}
@@ -86,12 +88,12 @@ CREATE TABLE IF NOT EXISTS contacts (
 	}()
 
 	_, err = pool.Exec(ctx, `
-CREATE TABLE IF NOT EXISTS emails (
-    id uuid PRIMARY KEY,
-    email text NOT NULL UNIQUE,
-    contact_id uuid REFERENCES contacts(id) ON DELETE CASCADE
-)
-    `)
+		CREATE TABLE IF NOT EXISTS emails (
+			id uuid PRIMARY KEY,
+			email text NOT NULL UNIQUE,
+			contact_id uuid REFERENCES contacts(id) ON DELETE CASCADE
+		)
+	`)
 	defer func() {
 		if _, err := pool.Exec(ctx, `DROP TABLE IF EXISTS emails`); err != nil {
 			panic(err)

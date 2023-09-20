@@ -197,20 +197,31 @@ func (r *Repo[T]) applyFilter(s *sqldb.SQL, f hohin.Filter) error {
 	switch f.Operation {
 	case operations.Not:
 		s.Add("NOT (")
-		r.applyFilter(s, f.Value.(hohin.Filter))
+		err := r.applyFilter(s, f.Value.(hohin.Filter))
+		if err != nil {
+			return err
+		}
 		s.Add(")")
 	case operations.And:
 		for _, filter := range f.Value.([]hohin.Filter) {
-			r.applyFilter(s, filter)
+			err := r.applyFilter(s, filter)
+			if err != nil {
+				return err
+			}
 			s.Add(" AND ")
 		}
 		s.RemoveLast()
 	case operations.Or:
 		for _, filter := range f.Value.([]hohin.Filter) {
-			r.applyFilter(s, filter)
+			err := r.applyFilter(s, filter)
+			if err != nil {
+				return err
+			}
 			s.Add(" OR ")
 		}
 		s.RemoveLast()
+	case operations.IsNull:
+		s.Add(col, " IS NULL")
 	case operations.Eq:
 		s.Add(col, " = ").Param(f.Value)
 	case operations.IEq:
@@ -260,11 +271,14 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.DB, f hohin.Filter) (bool,
 	var result bool
 	db := d.(*DB)
 	sql := NewSQL("SELECT EXISTS (", r.query, " WHERE ")
-	r.applyFilter(sql, f)
+	err := r.applyFilter(sql, f)
+	if err != nil {
+		return result, err
+	}
 	sql.Add(")")
 	query, params := sql.Build()
 	row := db.executor.QueryRowContext(ctx, query, params...)
-	err := row.Scan(&result)
+	err = row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
@@ -274,9 +288,12 @@ func (r *Repo[T]) Exists(ctx context.Context, d hohin.DB, f hohin.Filter) (bool,
 func (r *Repo[T]) Delete(ctx context.Context, d hohin.DB, f hohin.Filter) error {
 	db := d.(*DB)
 	sql := NewSQL("DELETE FROM ", r.table, " WHERE ")
-	r.applyFilter(sql, f)
+	err := r.applyFilter(sql, f)
+	if err != nil {
+		return err
+	}
 	query, params := sql.Build()
-	_, err := db.executor.ExecContext(ctx, query, params...)
+	_, err = db.executor.ExecContext(ctx, query, params...)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}
@@ -361,7 +378,10 @@ func (r *Repo[T]) Update(ctx context.Context, d hohin.DB, f hohin.Filter, entity
 		sql.Add(k, " = ").Param(v).Add(", ")
 	}
 	sql.RemoveLast().Add(" WHERE ")
-	r.applyFilter(sql, f)
+	err = r.applyFilter(sql, f)
+	if err != nil {
+		return err
+	}
 	query, params := sql.Build()
 	if _, err := db.executor.ExecContext(ctx, query, params...); err != nil {
 		return fmt.Errorf("cannot execute query `%s`: %w", query, err)
@@ -381,11 +401,14 @@ func (r Repo[T]) Count(ctx context.Context, d hohin.DB, f hohin.Filter) (uint64,
 	var result uint64
 	db := d.(*DB)
 	sql := NewSQL("SELECT COUNT(1) FROM (", r.query, " WHERE ")
-	r.applyFilter(sql, f)
+	err := r.applyFilter(sql, f)
+	if err != nil {
+		return result, err
+	}
 	sql.Add(") AS q")
 	query, params := sql.Build()
 	row := db.executor.QueryRowContext(ctx, query, params...)
-	err := row.Scan(&result)
+	err = row.Scan(&result)
 	if err != nil {
 		err = fmt.Errorf("cannot execute query `%s`: %w", query, err)
 	}

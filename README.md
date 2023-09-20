@@ -211,7 +211,7 @@ func Example() {
             return entity, err
         },
         AfterAdd: func(c Contact) []*sqldb.SQL {
-            qs := make([]*sqldb.SQL, 0)
+            var qs []*sqldb.SQL
             for _, e := range c.Emails {
                 q := sqlite3.NewSQL("INSERT INTO emails (pk, email, contact_pk) VALUES (").
                     JoinParams(", ", uuid.New(), e, c.Id).

@@ -127,17 +127,17 @@ func TestRepo(t *testing.T) {
 	}
 
 	_, err = pool.Exec(ctx, `
-CREATE TABLE users (
-    Id uuid PRIMARY KEY,
-    Name text NOT NULL,
-    Age bigint NOT NULL,
-    Active boolean NOT NULL,
-    Weight float8 NOT NULL,
-    Money decimal NOT NULL,
-    IpAddress inet NOT NULL,
-    RegisteredAt timestamptz NOT NULL
-)
-       `)
+			CREATE TABLE users (
+				Id uuid PRIMARY KEY,
+				Name text NOT NULL,
+				Age bigint NOT NULL,
+				Active boolean NOT NULL,
+				Weight float8 NOT NULL,
+				Money decimal NOT NULL,
+				IpAddress inet NOT NULL,
+				RegisteredAt timestamptz NOT NULL
+			)
+	`)
 	if err != nil {
 		panic(err)
 	}
@@ -714,7 +714,7 @@ CREATE TABLE users (
 			t.Fatal(err)
 		}
 		if exists {
-			t.Fatal("Transaction wasn't commited")
+			t.Fatal("Transaction wasn't committed")
 		}
 	})
 
@@ -749,7 +749,41 @@ CREATE TABLE users (
 			t.Fatal(err)
 		}
 		if exists {
-			t.Fatal("Transaction wasn't commited")
+			t.Fatal("Transaction wasn't committed")
+		}
+	})
+
+	t.Run("NullTest", func(t *testing.T) {
+		_, err = pool.Exec(context.Background(), `DROP TABLE IF EXISTS options`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = pool.Exec(context.Background(), `CREATE TABLE options (Value text)`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		type Option struct {
+			Value *string
+		}
+		optionsRepo := NewRepo(Conf[Option]{Table: "options"}).Simple()
+
+		val := "test"
+		optionsRepo.Add(db, Option{Value: &val})
+		optionsRepo.Add(db, Option{Value: &val})
+		optionsRepo.Add(db, Option{})
+		count, err := optionsRepo.Count(db, hohin.IsNull("Value"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%v != 1", count)
+		}
+		count, err = optionsRepo.Count(db, hohin.Not(hohin.IsNull("Value")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 2 {
+			t.Fatalf("%v != 2", count)
 		}
 	})
 }

@@ -29,11 +29,13 @@ func makeContactsRepo() hohin.SimpleRepo[Contact] {
 			"Name": "name",
 		},
 		Query: `
-SELECT * FROM (SELECT contacts.id, contacts.name, json_arrayagg(emails.email) AS emails
-FROM contacts
-LEFT JOIN emails ON emails.contact_id = contacts.id
-GROUP BY contacts.id, contacts.name) AS query
-        `,
+			SELECT * FROM (
+				SELECT contacts.id, contacts.name, json_arrayagg(emails.email) AS emails
+				FROM contacts
+				LEFT JOIN emails ON emails.contact_id = contacts.id
+				GROUP BY contacts.id, contacts.name
+			) AS query
+		`,
 		Load: func(row Scanner) (Contact, error) {
 			var entity Contact
 			var emailsData string
@@ -77,11 +79,11 @@ func TestCustomizedRepo(t *testing.T) {
 	defer pool.Close()
 
 	_, err = pool.Exec(`
-CREATE TABLE IF NOT EXISTS contacts (
-    Id char(36) PRIMARY KEY,
-    name varchar(36) NOT NULL
-)
-    `)
+		CREATE TABLE contacts (
+			Id char(36) PRIMARY KEY,
+			name varchar(36) NOT NULL
+		)
+	`)
 	if err != nil {
 		panic(err)
 	}
@@ -92,12 +94,12 @@ CREATE TABLE IF NOT EXISTS contacts (
 	}()
 
 	_, err = pool.Exec(`
-CREATE TABLE IF NOT EXISTS emails (
-    Id char(36) PRIMARY KEY,
-    email varchar(100) NOT NULL UNIQUE,
-    contact_id char(36) REFERENCES contacts(id) ON DELETE CASCADE
-)
-    `)
+		CREATE TABLE IF NOT EXISTS emails (
+			Id char(36) PRIMARY KEY,
+			email varchar(100) NOT NULL UNIQUE,
+			contact_id char(36) REFERENCES contacts(id) ON DELETE CASCADE
+		)
+	`)
 	if err != nil {
 		panic(err)
 	}

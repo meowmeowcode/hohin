@@ -675,7 +675,33 @@ func TestRepo(t *testing.T) {
 			t.Fatal(err)
 		}
 		if exists {
-			t.Fatal("Transaction wasn't commited")
+			t.Fatal("Transaction wasn't committed")
+		}
+	})
+
+	t.Run("NullTest", func(t *testing.T) {
+		type Option struct {
+			Value *string
+		}
+		optionsRepo := NewRepo[Option]("options").Simple()
+
+		val := "test"
+		optionsRepo.Add(db, Option{Value: &val})
+		optionsRepo.Add(db, Option{Value: &val})
+		optionsRepo.Add(db, Option{})
+		count, err := optionsRepo.Count(db, hohin.IsNull("Value"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 1 {
+			t.Fatalf("%v != 1", count)
+		}
+		count, err = optionsRepo.Count(db, hohin.Not(hohin.IsNull("Value")))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if count != 2 {
+			t.Fatalf("%v != 2", count)
 		}
 	})
 }
